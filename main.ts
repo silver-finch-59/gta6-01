@@ -61,8 +61,8 @@ function copyScreenshots() {
   if (!existsSync(src)) return 0;
   cpSync(src, dst, { recursive: true });
   const names = readdirSync(dst).filter((name) => !name.startsWith('.'));
-  // The scorer refuses a screenshot over 256 KiB, so refuse it here first
-  // instead of handing in an entry that is rejected at the gate.
+  // Refuse a screenshot over 256 KiB here first, instead of handing in
+  // an entry the scorer rejects at the gate.
   for (const name of names) {
     const size = statSync(join(dst, name)).size;
     if (size > DOSSIER_OPTIONS.screenshots.max_bytes) {

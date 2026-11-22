@@ -1,4 +1,4 @@
-// hud.js — HUD, minimap, dialogue, objectives, damage vignette.
+// hud.js — HUD, minimap, dialogue, objectives, and damage vignette.
 import { CONFIG, districtAt, respectTierName, phaseOfDay } from './config.js';
 import { MISSION_TITLES } from './missions.js';
 

@@ -1,4 +1,4 @@
-// missions.js — eight story missions, taxi fares, hidden packages.
+// missions.js — eight story missions, taxi fares, and hidden packages.
 import * as THREE from 'three';
 import { CONFIG, districtAt } from './config.js';
 import { Car } from './vehicles.js';

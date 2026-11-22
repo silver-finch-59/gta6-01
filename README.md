@@ -18,7 +18,7 @@ You are **Nova Reyes**, getaway driver, back in **Solmar Bay** — a sun-soaked
 coastal city with a downtown skyline, a marina, old-town streets, a beachfront
 and a harbor. Explore it on foot or behind the wheel, steal cars, outrun the
 Solmar Bay police, run jobs for fixer Dom Ferreira, and take the city back
-from the Viper crew.
+from the Vipers.
 
 - **Open world**: a drivable city grid with nine districts, a beach and an
   ocean, traffic, pedestrians, traffic lights, and a full day/night cycle —

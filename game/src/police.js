@@ -1,4 +1,4 @@
-// police.js — chases, PIT maneuvers, foot cops, roadblocks, helicopter.
+// police.js — chases, PIT maneuvers, foot cops, roadblocks, and helicopter.
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { Car, getPlayerCar } from './vehicles.js';

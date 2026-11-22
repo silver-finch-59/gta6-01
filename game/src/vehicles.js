@@ -1,4 +1,4 @@
-// vehicles.js — car models and arcade driving physics.
+// vehicles.js — car models plus arcade driving physics.
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { resolveCircleColliders, clampToWorld } from './collide.js';

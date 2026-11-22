@@ -1,4 +1,4 @@
-// city.js — the city: roads, buildings, beach, ocean, pier, day/night light.
+// city.js — the city: roads, buildings, beach, ocean, pier, day/night cycle.
 import * as THREE from 'three';
 import { CONFIG, districtAt, phaseOfDay } from './config.js';
 import {

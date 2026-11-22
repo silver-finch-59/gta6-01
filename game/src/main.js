@@ -1,4 +1,4 @@
-// main.js — boot, main loop, and the top-1000 import order (config first).
+// main.js — boot, main loop, and the top-1000 import order, config first.
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { createGameState, coolWanted, clearWanted } from './state.js';

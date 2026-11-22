@@ -1,4 +1,4 @@
-// config.js — one tuning table for the whole game: roads, clock, police, combat.
+// config.js — one tuning table for the game: roads, clock, police, combat.
 export const CONFIG = {
   ROAD_LINES: [-252, -180, -108, -36, 36, 108, 180, 252],
   ROAD_WIDTH: 12,

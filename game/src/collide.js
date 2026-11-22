@@ -1,4 +1,4 @@
-// collide.js — circle/box collision, line of sight, swept movement.
+// collide.js — circle/box collision, sight lines, swept movement.
 import { CONFIG } from './config.js';
 
 function nearestOnBox(b, x, z) {

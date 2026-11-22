@@ -1,4 +1,4 @@
-// audio.js — synthesized WebAudio: engine, sirens, gunshots, three radio stations.
+// audio.js — WebAudio synth: engine, sirens, gunshots, and three radio stations.
 import { CONFIG } from './config.js';
 
 const STATIONS = [

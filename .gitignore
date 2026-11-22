@@ -1,4 +1,4 @@
-# Build outputs and local scratch — never committed.
+# Build outputs and local scratch — keep out of git.
 out/
 out2/
 node_modules/

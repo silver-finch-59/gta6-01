@@ -1,4 +1,4 @@
-// rng.js — seeded deterministic randomness (sfc32) for the whole game.
+// rng.js — seeded deterministic randomness (sfc32) for the game.
 export function hashSeed(value) {
   let h = 2166136261 >>> 0;
   const text = String(value);

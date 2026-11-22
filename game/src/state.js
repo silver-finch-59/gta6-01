@@ -1,4 +1,4 @@
-// state.js — shared game state: money, health, wanted level, respect.
+// state.js — shared game state: money, health, wanted level, and respect.
 import { CONFIG } from './config.js';
 
 export function createEventBus() {

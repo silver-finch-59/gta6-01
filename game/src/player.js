@@ -1,4 +1,4 @@
-// player.js — on-foot movement, sprint stamina, punching, camera.
+// player.js — on-foot movement, sprint stamina, punching, and camera.
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { commitCrime, healPlayer } from './state.js';

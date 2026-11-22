@@ -1,4 +1,4 @@
-// save.js — localStorage save and load (v2 format, migrates v1).
+// save.js — localStorage save and load, v2 format, migrates v1.
 import { CONFIG } from './config.js';
 
 const SAVE_VERSION = 2;

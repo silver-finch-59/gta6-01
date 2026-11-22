@@ -1,4 +1,4 @@
-// textures.js — procedural canvas textures: facades, roads, neon, sand.
+// textures.js — procedural canvas textures: facades, roads, neon, and sand.
 import * as THREE from 'three';
 
 function blankCanvas(w, h) {

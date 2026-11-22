@@ -1,4 +1,4 @@
-// traffic.js — traffic cars, buses and pedestrians on the road graph.
+// traffic.js — traffic cars, buses, and pedestrians on the road graph.
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { Car, getPlayerCar } from './vehicles.js';

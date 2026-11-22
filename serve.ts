@@ -21,7 +21,7 @@ function pickPort() {
   return 8080;
 }
 
-// --host lets the game be reached from another device on the same network
+// --host reaches the game from another device on the same network
 // (for example a phone); it defaults to localhost, so nothing is exposed
 // unless the flag is given.
 function pickHost() {
