@@ -1,17 +1,10 @@
-// Solmar Bay — pistol combat and the Viper crew. Enemies come in three
-// flavours: grunts who chase and shoot, rushers who sprint in for a melee
-// swing, and shooters who hold their distance and fire in bursts. The
-// player shoots with the mouse or F, on foot only; every shot is a ray from
-// the camera through the screen centre, checked against enemies first and
-// buildings second. Defeated enemies drop a little loot.
+// combat.js — shooting with box tracers, muzzle flash, and enemy AI.
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { commitCrime, hurtPlayer, healPlayer, addMoney } from './state.js';
 import { resolveCircleColliders, clampToWorld, hasLineOfSight } from './collide.js';
 import { makeHumanoid } from './player.js';
 
-// Segment (origin + dir * t, 0 <= t <= maxT) against an axis-aligned box.
-// Building colliders are 2D footprints; treat them as 24 m tall.
 function rayVsBox(ox, oy, oz, dx, dy, dz, maxT, b) {
   let tMin = 0;
   let tMax = maxT;
@@ -35,7 +28,7 @@ function rayVsBox(ox, oy, oz, dx, dy, dz, maxT, b) {
 }
 
 const TRACER_POOL = 20;
-const TRACER_LIFE = 0.14;
+const TRACER_LIFE = 0.22;
 
 export function createCombat(world) {
   const { scene, camera, state, input } = world;
@@ -45,7 +38,6 @@ export function createCombat(world) {
   let cooldown = 0;
   let muzzleTimer = 0;
 
-  // --- Muzzle flash: one reusable plane + one reusable point light ---
   const muzzleLight = new THREE.PointLight(0xffc861, 0, 9, 1.6);
   scene.add(muzzleLight);
   const muzzleFlash = new THREE.Mesh(
@@ -55,29 +47,28 @@ export function createCombat(world) {
   muzzleFlash.visible = false;
   scene.add(muzzleFlash);
 
-  // --- Tracer pool: reusable THREE.Line objects, no per-shot allocation ---
   const tracers = [];
+  const _tracerMid = new THREE.Vector3();
   for (let i = 0; i < TRACER_POOL; i += 1) {
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
-    const mat = new THREE.LineBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0 });
-    const line = new THREE.Line(geo, mat);
-    line.visible = false;
-    line.frustumCulled = false;
-    scene.add(line);
-    tracers.push({ line, life: 0 });
+    const geo = new THREE.BoxGeometry(0.16, 0.16, 1);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xfff0a8, transparent: true, opacity: 0, depthWrite: false });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.visible = false;
+    mesh.frustumCulled = false;
+    scene.add(mesh);
+    tracers.push({ mesh, life: 0 });
   }
   let tracerCursor = 0;
 
   function fireTracer(from, to) {
     const t = tracers[tracerCursor];
     tracerCursor = (tracerCursor + 1) % TRACER_POOL;
-    const pos = t.line.geometry.attributes.position;
-    pos.setXYZ(0, from.x, from.y, from.z);
-    pos.setXYZ(1, to.x, to.y, to.z);
-    pos.needsUpdate = true;
-    t.line.material.opacity = 0.9;
-    t.line.visible = true;
+    _tracerMid.copy(from).add(to).multiplyScalar(0.5);
+    t.mesh.position.copy(_tracerMid);
+    t.mesh.scale.set(1, 1, Math.max(0.1, from.distanceTo(to)));
+    t.mesh.lookAt(to);
+    t.mesh.material.opacity = 0.9;
+    t.mesh.visible = true;
     t.life = TRACER_LIFE;
   }
 
@@ -95,8 +86,6 @@ export function createCombat(world) {
   const raycaster = new THREE.Raycaster();
   raycaster.far = CONFIG.COMBAT.PISTOL_RANGE;
 
-  // Loot dropped by a defeated enemy: a spinning green cross (health) or a
-  // gold coin stack (cash). Walk over it to collect.
   function dropLoot(x, z) {
     const kind = world.rng && world.rng.chance(0.5) ? 'health' : 'cash';
     const g = new THREE.Group();
@@ -121,28 +110,23 @@ export function createCombat(world) {
     state.stats.shotsFired += 1;
     commitCrime(state, 5);
     state.events.emit('sfx', { name: 'shot' });
-    // The crowd reacts to gunfire.
     if (world.traffic && typeof world.traffic.scare === 'function') {
       world.traffic.scare(p.x, p.z, 45);
     }
 
-    // Muzzle flash at the gun: a bright plane plus a point light that
-    // throws a warm blink across the street.
     gunWorldPos(_gun);
     muzzleFlash.position.copy(_gun);
     muzzleFlash.lookAt(camera.position);
     muzzleFlash.visible = true;
-    muzzleFlash.scale.setScalar(1.4);
-    muzzleTimer = 0.07;
+    muzzleFlash.scale.setScalar(2.0);
+    muzzleTimer = 0.10;
     muzzleLight.position.copy(_gun);
     muzzleLight.intensity = 18;
 
-    // Ray from the camera through the screen centre.
     raycaster.setFromCamera(_center, camera);
     const origin = raycaster.ray.origin;
     const dir = raycaster.ray.direction;
 
-    // Nearest living enemy hit.
     let enemyHit = null;
     let enemyT = Infinity;
     const meshes = [];
@@ -162,7 +146,6 @@ export function createCombat(world) {
       }
     }
 
-    // Nearest building hit (segment vs AABB on the city colliders).
     let buildingT = Infinity;
     const colliders = (world.city && world.city.colliders) || [];
     for (let i = 0; i < colliders.length; i += 1) {
@@ -173,7 +156,6 @@ export function createCombat(world) {
 
     const range = CONFIG.COMBAT.PISTOL_RANGE;
     if (enemyHit && enemyT < buildingT && enemyT <= range) {
-      // Damage falls off with distance: full up close, half at max range.
       const falloff = 1 - (enemyT / range) * 0.5;
       enemyHit.health -= CONFIG.COMBAT.PISTOL_DAMAGE * falloff;
       enemyHit.flash = 0.12;
@@ -183,7 +165,6 @@ export function createCombat(world) {
       fireTracer(_gun, _to);
       if (enemyHit.health <= 0) killEnemy(enemyHit);
     } else {
-      // Miss or blocked by a building: tracer stops at the nearest surface.
       const stopT = Math.min(buildingT, range);
       _to.copy(origin).addScaledVector(dir, stopT);
       fireTracer(_gun, _to);
@@ -195,7 +176,6 @@ export function createCombat(world) {
     enemy.state = 'dead';
     enemy.deathTimer = 3;
     enemy.mesh.rotation.x = -Math.PI / 2;
-    // Keep the fallen body from blocking the raycaster as a live target.
     enemy.mesh.traverse((o) => { o.userData.enemyRef = null; });
     dropLoot(enemy.x, enemy.z);
   }
@@ -216,7 +196,6 @@ export function createCombat(world) {
         x = rng.range(-100, 100);
         z = rng.range(-100, 100);
       }
-      // Kind: callers can ask for a mix; otherwise rotate grunt/rusher/shooter.
       const kind = (kinds && kinds[i % kinds.length]) || ['grunt', 'rusher', 'shooter'][i % 3];
       const mesh = makeHumanoid({
         jacket: rng ? rng.pick(jackets) : jackets[i % jackets.length],
@@ -224,7 +203,6 @@ export function createCombat(world) {
         skin: rng ? rng.pick(skins) : skins[i % skins.length],
         shirt: 0x111111,
       });
-      // Rushers wear a bright bandana-red jacket, shooters a dark hood.
       if (kind === 'rusher') {
         mesh.userData.parts.body.material = mesh.userData.parts.body.material.clone();
         mesh.userData.parts.body.material.color.setHex(0xb03030);
@@ -263,8 +241,6 @@ export function createCombat(world) {
     return n;
   }
 
-  // A spot to hide behind: the nearest parked or traffic car, if it sits
-  // between the enemy and the player.
   function findCover(e) {
     const traffic = world.traffic;
     if (!traffic || !traffic.cars) return null;
@@ -279,7 +255,6 @@ export function createCombat(world) {
       const dz = car.z - pz;
       const d = Math.hypot(dx, dz);
       if (d > 25 || d < 2) continue;
-      // The car must be roughly on the line between enemy and player.
       const ex = e.x - px;
       const ez = e.z - pz;
       const el = Math.hypot(ex, ez) || 1;
@@ -296,28 +271,25 @@ export function createCombat(world) {
 
     if (cooldown > 0) cooldown -= dt;
 
-    // Muzzle flash fades in ~70 ms.
     if (muzzleTimer > 0) {
       muzzleTimer -= dt;
-      muzzleLight.intensity = Math.max(0, muzzleLight.intensity - (18 / 0.07) * dt);
-      muzzleFlash.scale.setScalar(Math.max(0.2, muzzleTimer / 0.07) * 1.4);
+      muzzleLight.intensity = Math.max(0, muzzleLight.intensity - (18 / 0.10) * dt);
+      muzzleFlash.scale.setScalar(Math.max(0.2, muzzleTimer / 0.10) * 2.0);
       if (muzzleTimer <= 0) {
         muzzleFlash.visible = false;
         muzzleLight.intensity = 0;
       }
     }
 
-    // Tracer lifetimes: fade out over their short life.
     for (let i = 0; i < tracers.length; i += 1) {
       const t = tracers[i];
       if (t.life > 0) {
         t.life -= dt;
-        t.line.material.opacity = Math.max(0, (t.life / TRACER_LIFE) * 0.9);
-        if (t.life <= 0) t.line.visible = false;
+        t.mesh.material.opacity = Math.max(0, (t.life / TRACER_LIFE) * 0.9);
+        if (t.life <= 0) t.mesh.visible = false;
       }
     }
 
-    // Loot drops: spin, bob, expire; collect on touch.
     for (let i = drops.length - 1; i >= 0; i -= 1) {
       const drop = drops[i];
       drop.timer -= dt;
@@ -342,7 +314,6 @@ export function createCombat(world) {
       }
     }
 
-    // Armed stance + firing input, on foot only.
     const wantArmed = playing && p.onFoot
       && (input.keys.has('KeyF') || input.mouseDown);
     p.armed = wantArmed;
@@ -368,7 +339,6 @@ export function createCombat(world) {
         continue;
       }
 
-      // Hit flash decay.
       if (e.flash > 0) {
         e.flash -= dt;
         if (e.flash <= 0) {
@@ -383,7 +353,6 @@ export function createCombat(world) {
       const nx = dx / dist;
       const nz = dz / dist;
 
-      // Hurt enemies duck behind the nearest car for a breather.
       if (e.health < e.maxHealth * 0.5 && e.coverTimer <= 0 && e.state !== 'cover') {
         const cover = findCover(e);
         if (cover) {
@@ -396,7 +365,6 @@ export function createCombat(world) {
       if (e.coverTimer > 0) e.coverTimer -= dt;
       if (e.state === 'cover' && e.coverTimer <= 0) e.state = 'chase';
 
-      // Movement by kind.
       let speed = 4;
       let moveX = nx;
       let moveZ = nz;
@@ -411,12 +379,10 @@ export function createCombat(world) {
       } else if (e.kind === 'rusher') {
         speed = CONFIG.COMBAT.RUSHER_SPEED;
       } else if (e.kind === 'shooter') {
-        // Hold a ring at ~26 m: close in when too far, back off when too near.
         if (dist > 28) speed = 4.5;
         else if (dist < 20) { moveX = -nx; moveZ = -nz; speed = 3.5; }
         else { moveX = 0; moveZ = 0; speed = 0; }
       }
-      // A sideways strafe wobble so they never walk in a dead-straight line.
       const wobble = Math.sin(state.time * 2 + e.wobblePhase) * 0.45;
       const mx = moveX + (-moveZ) * wobble;
       const mz = moveZ + moveX * wobble;
@@ -436,7 +402,6 @@ export function createCombat(world) {
       e.mesh.position.set(e.x, 0, e.z);
       e.mesh.rotation.y = e.yaw;
 
-      // Walk animation while closing in; aim pose when in range.
       const parts = e.mesh.userData.parts;
       if (dist > minDist && speed > 0) {
         e.walkPhase += dt * speed * 1.7;
@@ -447,7 +412,6 @@ export function createCombat(world) {
         parts.armR.rotation.x = swing * 0.8;
       } else {
         if (e.kind === 'rusher') {
-          // Melee wind-up: both arms back, then a swing.
           parts.armR.rotation.x = -2.2 + Math.sin(state.time * 6 + e.wobblePhase) * 0.4;
           parts.armL.rotation.x = 0.4;
         } else {
@@ -458,7 +422,6 @@ export function createCombat(world) {
         parts.legR.rotation.x = 0;
       }
 
-      // Attacks.
       e.shootTimer -= dt;
       if (e.kind === 'rusher') {
         if (dist < 2.4 && e.shootTimer <= 0) {
@@ -467,13 +430,11 @@ export function createCombat(world) {
           state.events.emit('sfx', { name: 'punch' });
         }
       } else if (dist < CONFIG.COMBAT.ENEMY_RANGE && e.shootTimer <= 0 && e.state !== 'cover') {
-        // Shooters fire in bursts of three; grunts fire single shots.
         if (e.kind === 'shooter' && e.burstLeft <= 0) e.burstLeft = CONFIG.COMBAT.SHOOTER_BURST;
         const burst = e.kind === 'shooter';
         e.shootTimer = burst ? 0.16 : CONFIG.COMBAT.ENEMY_RATE_SECONDS * (0.8 + (world.rng ? world.rng.next() * 0.4 : 0.2));
         if (burst) e.burstLeft -= 1;
         if (burst && e.burstLeft <= 0) e.shootTimer = CONFIG.COMBAT.ENEMY_RATE_SECONDS * 1.4;
-        // Only shoot when the line of sight is clear; otherwise hold fire.
         if (hasLineOfSight(e.x, e.z, px, pz, colliders)) {
           _gun.set(e.x, 1.4, e.z);
           const hit = world.rng ? world.rng.chance(0.55) : true;

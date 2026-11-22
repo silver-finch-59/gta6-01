@@ -1,7 +1,4 @@
-// Solmar Bay — ambient traffic and pedestrians. Traffic cars follow the
-// city road graph and stop for red lights; pedestrians walk the sidewalks,
-// chat in pairs, and sometimes jaywalk. A pedestrian hit by the player's car
-// is a crime (heat, and the crowd notices).
+// traffic.js — traffic cars, buses and pedestrians on the road graph.
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { Car, getPlayerCar } from './vehicles.js';
@@ -16,11 +13,8 @@ const SKINS = [0xe8b88a, 0xc98d5f, 0x8a5a3b, 0xf0c8a0, 0x6e4426];
 const SHIRTS = [0xffffff, 0xe8e8e8, 0x222831, 0xd84a4a, 0x4a90d8, 0x3a3a3a, 0xf2c200];
 
 const PED_RADIUS = 0.7;
-// Intersections with traffic lights (same four the city dresses with poles).
 const LIGHT_SPOTS = [[-36, -36], [36, 36], [-36, 108], [108, -36]];
 
-// Fallback graph if the city module ever ships without a road graph: nodes
-// at every road-line intersection, edges between neighbours along each line.
 function fallbackGraph() {
   const lines = CONFIG.ROAD_LINES;
   const nodes = [];
@@ -41,8 +35,6 @@ function fallbackGraph() {
   return { nodes, edges };
 }
 
-// Sidewalks come from the city as {x1,z1,x2,z2} segments; accept a few plain
-// shapes for safety, and fake strips outside each road line if none exist.
 function cleanSidewalks(city) {
   const raw = city ? city.sidewalks : null;
   const segs = [];
@@ -82,7 +74,6 @@ export function createTraffic(world) {
   const nodes = graph.nodes;
   const edges = graph.edges;
 
-  // Adjacency list for route picking.
   const adj = nodes.map(() => []);
   for (const e of edges) {
     if (e.a == null || e.b == null || !nodes[e.a] || !nodes[e.b]) continue;
@@ -98,8 +89,6 @@ export function createTraffic(world) {
     return -1;
   }
 
-  // Traffic lights: one per dressed intersection, cycling green -> amber ->
-  // red with a per-light offset so the city never flips all at once.
   const lights = LIGHT_SPOTS.map(([x, z], i) => ({
     node: nodeAt(x, z),
     offset: i * 2.3,
@@ -182,7 +171,6 @@ export function createTraffic(world) {
     const ex = b.x - a.x;
     const ez = b.z - a.z;
     const len = Math.hypot(ex, ez) || 1;
-    // Park just off the road edge, facing along the road.
     const side = rng.chance(0.5) ? 1 : -1;
     const x = p.x + (-ez / len) * 3.4 * side;
     const z = p.z + (ex / len) * 3.4 * side;
@@ -193,7 +181,6 @@ export function createTraffic(world) {
     return { car, kind: 'parked', edge: p.edgeIndex, nodeTarget: null, speed: 0, color, _stuck: 0 };
   }
 
-  // A slow city bus looping the downtown rectangle, node by node.
   function spawnBus() {
     const loop = [[-36, -36], [108, -36], [108, 108], [-36, 108]]
       .map(([x, z]) => nodeAt(x, z))
@@ -213,7 +200,6 @@ export function createTraffic(world) {
   const busEntry = spawnBus();
   if (busEntry) cars.push(busEntry);
 
-  // ---- Pedestrians -------------------------------------------------------
   const sidewalkSegs = cleanSidewalks(city);
 
   function giveSegment(ped) {
@@ -293,7 +279,6 @@ export function createTraffic(world) {
 
   const peds = [];
   for (let i = 0; i < CONFIG.PEDESTRIANS.COUNT; i += 1) {
-    // A few stand and chat, a couple jaywalk across roads, the rest stroll.
     const roll = rng.next();
     const mode = roll < 0.14 ? 'chat' : roll < 0.22 ? 'jaywalk' : 'stroll';
     const ped = makePed(mode);
@@ -301,9 +286,6 @@ export function createTraffic(world) {
     peds.push(ped);
   }
 
-  // Pick the next node when a traffic car reaches its target: prefer the
-  // straightest continuation, sometimes take a random turn, never U-turn
-  // unless the road is a dead end.
   function chooseNextNode(entry) {
     const n = entry.nodeTarget;
     const neighbors = adj[n] || [];
@@ -341,8 +323,6 @@ export function createTraffic(world) {
     return list;
   }
 
-  // Scare every pedestrian near (x, z): combat calls this when a shot goes
-  // off, so the crowd reacts to gunfire instead of strolling through it.
   function scare(x, z, radius) {
     for (const ped of peds) {
       if (ped.fallen) continue;
@@ -364,7 +344,6 @@ export function createTraffic(world) {
     const policeCars = world.police ? world.police.policeCars || [] : [];
     const moving = allMovingCars(playerCar, policeCars);
 
-    // --- Traffic cars -----------------------------------------------------
     for (const entry of cars) {
       const car = entry.car;
       if (entry.kind === 'parked') {
@@ -379,18 +358,15 @@ export function createTraffic(world) {
       const distT = Math.hypot(dxT, dzT);
 
       let targetSpeed = entry.speed;
-      // Slow down near intersections.
       if (isJunction(entry.nodeTarget) && distT < 10) {
         targetSpeed = Math.min(targetSpeed, 6);
       }
-      // Obey the traffic light at a lit intersection.
       const light = lightForNode(entry.nodeTarget);
       if (light && distT < 14) {
         const colour = lightState(light, state.time);
         if (colour === 'red') targetSpeed = 0;
         else if (colour === 'amber') targetSpeed = Math.min(targetSpeed, 4);
       }
-      // Brake when another car is ahead within follow distance.
       if (targetSpeed > 3) {
         const fx = Math.sin(car.yaw);
         const fz = Math.cos(car.yaw);
@@ -421,7 +397,6 @@ export function createTraffic(world) {
         }
       }
 
-      // Anti-stuck: a car wedged behind a building respawns on a road.
       if (Math.abs(car.speed) < 0.5 && targetSpeed > 3) {
         entry._stuck += dt;
         if (entry._stuck > 5) respawnTraffic(entry);
@@ -430,7 +405,6 @@ export function createTraffic(world) {
       }
     }
 
-    // --- Car vs car separation (traffic + parked vs each other + player) ---
     for (let i = 0; i < cars.length; i += 1) {
       const a = cars[i].car;
       for (let j = i + 1; j < cars.length; j += 1) {
@@ -457,7 +431,6 @@ export function createTraffic(world) {
       cars[i].car.sync();
     }
 
-    // --- Pedestrians ------------------------------------------------------
     for (const ped of peds) {
       if (ped.fallen) {
         ped.fallTimer -= dt;
@@ -465,7 +438,6 @@ export function createTraffic(world) {
         if (ped.fallTimer <= 0) respawnPed(ped);
         continue;
       }
-      // Fleeing: run away from the scare point, then go back to strolling.
       if (ped.fleeing) {
         ped.fleeTimer -= dt;
         ped.x += ped.fleeX * CONFIG.PEDESTRIANS.FLEE_SPEED * dt;
@@ -488,7 +460,6 @@ export function createTraffic(world) {
         }
         continue;
       }
-      // A speeding car nearby also sends pedestrians running.
       if (playerCar && Math.abs(playerCar.speed) > 12) {
         const dx = ped.x - playerCar.x;
         const dz = ped.z - playerCar.z;
@@ -502,7 +473,6 @@ export function createTraffic(world) {
         }
       }
       if (ped.mode === 'chat') {
-        // Stand and chat: sway gently, wander off after a while.
         ped.chatTimer -= dt;
         ped.phase += dt * 1.5;
         ped.mesh.rotation.y = Math.sin(ped.phase * 0.5) * 0.6;
@@ -518,8 +488,6 @@ export function createTraffic(world) {
         continue;
       }
       if (ped.mode === 'jaywalk') {
-        // Cross the road on foot, walking perpendicular to the sidewalk
-        // segment from one side to the other, then stroll on.
         ped.cross += (ped.speed * dt) / 16;
         const seg = ped.sidewalk;
         const bx = seg.x1 + (seg.x2 - seg.x1) * ped.t;
@@ -572,7 +540,6 @@ export function createTraffic(world) {
       }
     }
 
-    // --- Pedestrian collisions -------------------------------------------
     for (const ped of peds) {
       if (ped.fallen) continue;
       let hit = false;
@@ -585,7 +552,6 @@ export function createTraffic(world) {
         if (playerCar && c === playerCar) hitByPlayer = true;
       }
       if (hit) {
-        // Fall over.
         ped.fallen = true;
         ped.fallTimer = 4;
         ped.mesh.rotation.x = -Math.PI / 2;

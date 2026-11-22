@@ -1,8 +1,4 @@
-// Solmar Bay — the player character, the third-person camera, and getting
-// in and out of cars. Nova Reyes on foot: walking, sprinting on stamina,
-// punching, picking up health, and driving anything with four wheels (or
-// two). The figure is built from boxes, a capsule and a sphere — no outside
-// assets, no network.
+// player.js — on-foot movement, sprint stamina, punching, camera.
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { commitCrime, healPlayer } from './state.js';
@@ -19,10 +15,6 @@ function cloth(color) {
   return new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.0 });
 }
 
-// A stylized person from boxes, a capsule and a sphere. The figure faces +Z
-// when rotation.y is 0, so yaw = Math.atan2(dx, dz) faces a movement vector.
-// Options pick the outfit; every figure carries the same named parts so the
-// traffic, police and combat modules can animate limbs and the gun alike.
 export function makeHumanoid({ jacket = 0x2e5fa3, pants = 0x23283a, skin = 0xc98d64, shirt = 0xe8e8e8 } = {}) {
   const group = new THREE.Group();
 
@@ -32,23 +24,19 @@ export function makeHumanoid({ jacket = 0x2e5fa3, pants = 0x23283a, skin = 0xc98
   const shirtMat = cloth(shirt);
   const darkMat = cloth(0x1a1a1a);
 
-  // Torso: capsule in the jacket colour, centred at hip-to-shoulder height.
   const bodyGeo = new THREE.CapsuleGeometry(0.32, 0.5, 4, 10);
   const body = new THREE.Mesh(bodyGeo, jacketMat);
   body.position.y = 1.22;
   group.add(body);
 
-  // Shirt panel on the chest so the jacket reads as clothing, not a blob.
   const chest = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.52, 0.06), shirtMat);
   chest.position.set(0, 1.26, 0.29);
   group.add(chest);
 
-  // A jacket stripe across the back for a little identity at distance.
   const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.09, 0.05), shirtMat);
   stripe.position.set(0, 1.38, -0.3);
   group.add(stripe);
 
-  // Head: sphere in the skin colour, plus a simple dark hair cap.
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.27, 16, 12), skinMat);
   head.position.y = 1.82;
   group.add(head);
@@ -56,7 +44,6 @@ export function makeHumanoid({ jacket = 0x2e5fa3, pants = 0x23283a, skin = 0xc98
   hair.position.y = 1.86;
   group.add(hair);
 
-  // Legs pivot at the hip: geometry translated so rotation.x swings from the top.
   const legGeo = new THREE.BoxGeometry(0.22, 0.82, 0.24);
   legGeo.translate(0, -0.41, 0);
   const legL = new THREE.Mesh(legGeo, pantsMat);
@@ -66,7 +53,6 @@ export function makeHumanoid({ jacket = 0x2e5fa3, pants = 0x23283a, skin = 0xc98
   legR.position.set(0.16, 0.85, 0);
   group.add(legR);
 
-  // Arms pivot at the shoulder the same way.
   const armGeo = new THREE.BoxGeometry(0.17, 0.68, 0.19);
   armGeo.translate(0, -0.34, 0);
   const armL = new THREE.Mesh(armGeo, jacketMat);
@@ -76,13 +62,11 @@ export function makeHumanoid({ jacket = 0x2e5fa3, pants = 0x23283a, skin = 0xc98
   armR.position.set(0.43, 1.52, 0);
   group.add(armR);
 
-  // Small pistol held in the right hand; hidden until the player is armed.
   const gun = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.12, 0.34), darkMat);
   gun.position.set(0.43, 0.86, 0.22);
   gun.visible = false;
   group.add(gun);
 
-  // Feet: dark shoes so the legs do not end in bare boxes.
   const shoeGeo = new THREE.BoxGeometry(0.22, 0.1, 0.34);
   shoeGeo.translate(0, -0.78, 0.04);
   const shoeL = new THREE.Mesh(shoeGeo, darkMat);
@@ -97,8 +81,6 @@ export function makeHumanoid({ jacket = 0x2e5fa3, pants = 0x23283a, skin = 0xc98
   return group;
 }
 
-// Health pickups: glowing green crosses at fixed spots around the city.
-// Walk over one to heal; it comes back after a minute.
 const MEDIC_SPOTS = [
   { x: -36, z: 244 }, // outside the hospital
   { x: 36, z: 244 }, // outside the garage
@@ -117,7 +99,6 @@ export function createPlayer(world) {
     skin: 0xc98d64,
     shirt: 0xf2e8d5,
   });
-  // A small backpack so Nova reads at a glance in a crowd.
   const pack = new THREE.Mesh(
     new THREE.BoxGeometry(0.4, 0.5, 0.16),
     new THREE.MeshStandardMaterial({ color: 0x3a2a12, roughness: 0.9 }),
@@ -129,7 +110,6 @@ export function createPlayer(world) {
   mesh.rotation.y = p.yaw;
   scene.add(mesh);
 
-  // Health pickup meshes, one per spot, with a respawn timer each.
   const medics = MEDIC_SPOTS.map((spot) => {
     const g = new THREE.Group();
     const post = new THREE.Mesh(
@@ -148,7 +128,6 @@ export function createPlayer(world) {
     return { group: g, x: spot.x, z: spot.z, timer: 0, active: true };
   });
 
-  // Camera orbit state. camYaw is the direction the camera looks (and W moves).
   let camYaw = p.yaw;
   let camPitch = 0.32;
   let camNear = false; // C toggles near / far
@@ -206,7 +185,6 @@ export function createPlayer(world) {
   function tryExitCar() {
     const car = p.car;
     if (!car) { p.onFoot = true; return; }
-    // Try the right side first, then the left, for a free spot beside the car.
     const fx = Math.sin(car.yaw);
     const fz = Math.cos(car.yaw);
     const rx = -fz;
@@ -220,7 +198,6 @@ export function createPlayer(world) {
       x = solved.x; z = solved.z;
       const clamped = clampToWorld(x, z, CONFIG.PLAYER.RADIUS);
       x = clamped.x; z = clamped.z;
-      // Don't exit into another car.
       let blocked = false;
       const traffic = world.traffic;
       if (traffic && traffic.cars) {
@@ -252,7 +229,6 @@ export function createPlayer(world) {
     syncMesh();
   }
 
-  // A punch on Q: shoves the nearest enemy or pedestrian in front of Nova.
   function tryPunch() {
     if (!p.onFoot || punchTimer > 0) return;
     if (state.time - p.lastPunchAt < CONFIG.PLAYER.PUNCH_COOLDOWN_SECONDS) return;
@@ -262,7 +238,6 @@ export function createPlayer(world) {
     const fx = Math.sin(p.yaw);
     const fz = Math.cos(p.yaw);
     const range = CONFIG.PLAYER.PUNCH_RANGE;
-    // Enemies first.
     const combat = world.combat;
     if (combat && combat.enemies) {
       for (const e of combat.enemies) {
@@ -280,7 +255,6 @@ export function createPlayer(world) {
         return;
       }
     }
-    // Otherwise shove a nearby pedestrian (rude, but not a crime).
     const traffic = world.traffic;
     if (traffic && traffic.peds) {
       for (const ped of traffic.peds) {
@@ -305,10 +279,8 @@ export function createPlayer(world) {
     const keys = input.keys;
     const just = input.justPressed;
 
-    // Camera toggle.
     if (playing && just.has('KeyC')) camNear = !camNear;
 
-    // Mouse-drag look: consume the accumulated deltas every frame.
     const dx = input.lookDX || 0;
     const dy = input.lookDY || 0;
     input.lookDX = 0;
@@ -320,16 +292,13 @@ export function createPlayer(world) {
       if (camPitch > 1.05) camPitch = 1.05;
     }
 
-    // Enter / exit car.
     if (playing && just.has('KeyE')) {
       if (p.onFoot) tryEnterCar();
       else tryExitCar();
     }
-    // Punch on Q.
     if (playing && just.has('KeyQ')) tryPunch();
     if (punchTimer > 0) punchTimer -= dt;
 
-    // Stumble: a brief lean when hurt, driven by the damage timestamp.
     const sinceHurt = state.time - p.lastDamageAt;
     stumbleTimer = sinceHurt < 0.45 ? 0.45 - sinceHurt : 0;
 
@@ -337,7 +306,6 @@ export function createPlayer(world) {
 
     if (p.onFoot) {
       if (playing) {
-        // Movement relative to the camera yaw: W walks away from the camera.
         const fx = Math.sin(camYaw);
         const fz = Math.cos(camYaw);
         const rx = -fz;
@@ -350,8 +318,6 @@ export function createPlayer(world) {
         if (keys.has('KeyA') || keys.has('ArrowLeft')) { mx -= rx; mz -= rz; }
         const len = Math.hypot(mx, mz);
         if (len > 0.001) { mx /= len; mz /= len; }
-        // Sprinting drains stamina; walking refills it. Out of stamina,
-        // Nova can only walk until some comes back.
         const wantSprint = keys.has('ShiftLeft') || keys.has('ShiftRight');
         const canSprint = wantSprint && p.stamina > 1;
         if (canSprint && len > 0.001) {
@@ -373,7 +339,6 @@ export function createPlayer(world) {
         p.x = clamped.x;
         p.z = clamped.z;
 
-        // Push out of traffic cars (circle vs circle).
         const traffic = world.traffic;
         if (traffic && traffic.cars) {
           for (let i = 0; i < traffic.cars.length; i += 1) {
@@ -396,7 +361,6 @@ export function createPlayer(world) {
         const speed = Math.hypot(velX, velZ);
         p.speed = speed;
 
-        // Facing: armed players face the camera yaw, otherwise the movement dir.
         if (p.armed) {
           facingYaw = angleLerp(facingYaw, camYaw, 1 - Math.exp(-14 * dt));
         } else if (speed > 0.5) {
@@ -405,7 +369,6 @@ export function createPlayer(world) {
         }
         p.yaw = facingYaw;
 
-        // Walk / run animation: bob plus swinging limbs.
         const speedFactor = Math.min(1, speed / CONFIG.PLAYER.WALK_SPEED);
         walkPhase += dt * speed * 1.7;
         const swing = Math.sin(walkPhase) * 0.62 * speedFactor;
@@ -413,11 +376,9 @@ export function createPlayer(world) {
         parts.legL.rotation.x = swing;
         parts.legR.rotation.x = -swing;
         if (punchTimer > 0) {
-          // Punch swing: right arm snaps forward.
           parts.armR.rotation.x = -Math.PI / 2 + 0.4 - punchTimer * 2;
           parts.armL.rotation.x = -swing * 0.8;
         } else if (p.armed) {
-          // Shooting stance: right arm points forward, left arm steadies it.
           parts.armR.rotation.x = -Math.PI / 2 + 0.12;
           parts.armL.rotation.x = -Math.PI / 2 + 0.35;
         } else {
@@ -425,7 +386,6 @@ export function createPlayer(world) {
           parts.armR.rotation.x = swing * 0.8;
         }
         mesh.position.y = Math.abs(Math.sin(walkPhase)) * 0.05 * speedFactor;
-        // Stumble lean right after taking a hit.
         mesh.rotation.z = stumbleTimer > 0 ? Math.sin(stumbleTimer * 20) * 0.08 : 0;
         if (parts.gun) parts.gun.visible = !!p.armed;
       } else {
@@ -435,7 +395,6 @@ export function createPlayer(world) {
       }
       syncMesh();
     } else {
-      // Driving: delegate to the car; the player follows it.
       const car = p.car;
       if (car && typeof car.updatePlayer === 'function') {
         if (playing) car.updatePlayer(dt, input);
@@ -453,7 +412,6 @@ export function createPlayer(world) {
       if (parts && parts.gun) parts.gun.visible = false;
     }
 
-    // Health pickups: spin slowly, heal on touch, respawn after a minute.
     for (const med of medics) {
       if (!med.active) {
         med.timer -= dt;
@@ -476,14 +434,12 @@ export function createPlayer(world) {
       }
     }
 
-    // Health regen after a quiet stretch (state.js tracks lastDamageAt).
     if (playing && state.health > 0 && state.health < CONFIG.PLAYER.MAX_HEALTH
       && state.time - p.lastDamageAt > CONFIG.PLAYER.REGEN_DELAY_SECONDS) {
       state.health = Math.min(CONFIG.PLAYER.MAX_HEALTH,
         state.health + CONFIG.PLAYER.HEALTH_REGEN_PER_SECOND * dt);
     }
 
-    // --- Third-person camera ---
     const baseDist = p.onFoot ? 7 : 10;
     const dist = camNear ? baseDist * 0.6 : baseDist;
     const targetX = p.x;
@@ -492,7 +448,6 @@ export function createPlayer(world) {
     const horiz = dist * Math.cos(camPitch);
     const camDirX = Math.sin(camYaw);
     const camDirZ = Math.cos(camYaw);
-    // Armed: shoulder the camera a touch to the side so the gun is visible.
     const shoulder = p.armed && p.onFoot ? 0.9 : 0;
     const sideX = -camDirZ;
     const sideZ = camDirX;

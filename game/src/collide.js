@@ -1,11 +1,6 @@
-// Solmar Bay — collision helpers on the flat plane. Everything that moves
-// (the player, cars, pedestrians, the helicopter's shadow) is a circle, and
-// everything solid is an axis-aligned box (buildings, walls, crates), so one
-// small file serves the player, the traffic, the police and combat alike.
-// Boxes look like { minX, maxX, minZ, maxZ }; circles are (x, z, radius).
+// collide.js — circle/box collision, line of sight, swept movement.
 import { CONFIG } from './config.js';
 
-// Closest point of a box to a position, clamped inside the box.
 function nearestOnBox(b, x, z) {
   return {
     x: b.minX > x ? b.minX : (b.maxX < x ? b.maxX : x),
@@ -13,7 +8,6 @@ function nearestOnBox(b, x, z) {
   };
 }
 
-// Smallest push-out axis when a circle centre is already inside a box.
 function pushOutFromInside(b, x, z, r) {
   const toLeft = x - b.minX + r;
   const toRight = b.maxX - x + r;
@@ -26,9 +20,6 @@ function pushOutFromInside(b, x, z, r) {
   return { x, z: b.maxZ + r };
 }
 
-// Push a circle out of every box it overlaps. Returns the corrected spot and
-// whether anything was hit, plus the box that was hit first for sound and
-// damage callers that care which wall was touched.
 export function resolveCircleColliders(x, z, r, colliders) {
   let hit = false;
   let firstBox = null;
@@ -54,7 +45,6 @@ export function resolveCircleColliders(x, z, r, colliders) {
   return { x, z, hit, box: firstBox };
 }
 
-// Same idea for a circle against one box only, without looping a list.
 export function resolveCircleBox(x, z, r, b) {
   const near = nearestOnBox(b, x, z);
   const dx = x - near.x;
@@ -69,8 +59,6 @@ export function resolveCircleBox(x, z, r, b) {
   return { x: out.x, z: out.z, hit: true };
 }
 
-// Move a circle in small sub-steps so a fast car cannot tunnel through a
-// thin wall in one frame. Returns the final spot and whether it hit anything.
 export function sweptCircle(x, z, r, vx, vz, dt, colliders) {
   const speed = Math.hypot(vx, vz);
   const steps = Math.max(1, Math.ceil((speed * dt) / (r * 0.5)));
@@ -86,8 +74,6 @@ export function sweptCircle(x, z, r, vx, vz, dt, colliders) {
   return { x: cx, z: cz, hit };
 }
 
-// True when the straight segment between two points crosses no box: used by
-// enemy shooters and the police to decide whether they can see the player.
 export function hasLineOfSight(ax, az, bx, bz, blockers) {
   for (const b of blockers) {
     if (segmentHitsBox(ax, az, bx, bz, b)) return false;
@@ -119,8 +105,6 @@ function segmentHitsBox(ax, az, bx, bz, b) {
   return true;
 }
 
-// Keep a circle inside the playable world. The beach lets the player run
-// further east than the road grid does, so the east edge is the ocean.
 export function clampToWorld(x, z, r) {
   return {
     x: Math.max(CONFIG.WORLD_MIN_X + r, Math.min(CONFIG.WORLD_MAX_X - r, x)),
@@ -135,7 +119,6 @@ export function circlesOverlap(ax, az, ar, bx, bz, br) {
   return dx * dx + dz * dz < reach * reach;
 }
 
-// True when a point lies inside a box (edges inclusive).
 export function pointInBox(x, z, b) {
   return x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ;
 }

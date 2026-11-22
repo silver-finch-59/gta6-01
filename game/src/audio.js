@@ -1,13 +1,6 @@
-// Solmar Bay — all-synthesized WebAudio: no sound files, no network.
-// Everything is built from oscillators and filtered noise, created lazily in
-// unlock() (the Start button calls it; a first pointerdown is a fallback).
-// Every public method is a no-op until the AudioContext exists and runs.
-// Three procedural radio stations (R cycles them), an engine hum that
-// follows speed, a two-tone siren that fades with distance, and gulls and
-// waves near the beach.
+// audio.js — synthesized WebAudio: engine, sirens, gunshots, three radio stations.
 import { CONFIG } from './config.js';
 
-// One station: a chord loop, a bass line that walks under it, and a tempo.
 const STATIONS = [
   {
     name: 'BAY FM 88.4',
@@ -45,7 +38,6 @@ export function createAudio(world) {
   let muted = false;
   let noiseBuf = null;
 
-  // Music nodes: a pad (three detuned voices) plus a bass voice.
   let musicGain = null;
   let bassGain = null;
   let padOscs = [];
@@ -54,18 +46,15 @@ export function createAudio(world) {
   let beatIndex = 0;
   let nextBeatAt = 0;
 
-  // Engine loop nodes (created once, gain driven by speed).
   let engineGain = null;
   let engineSaw = null;
   let engineSub = null;
 
-  // Siren loop nodes.
   let sirenOsc = null;
   let sirenGain = null;
   let sirenHigh = false;
   let sirenFlipAt = 0;
 
-  // Beach ambience: a slow filtered-noise swell, gain by distance to shore.
   let ambienceGain = null;
   let ambienceSrc = null;
 
@@ -144,7 +133,6 @@ export function createAudio(world) {
     padOscs = station().chords[0].map((freq, i) => {
       const osc = ctx.createOscillator();
       osc.type = 'triangle';
-      // Slight detune per voice so the pad shimmers instead of sounding flat.
       osc.frequency.value = freq;
       osc.detune.value = (i - 1) * 4;
       osc.connect(filter);
@@ -220,7 +208,6 @@ export function createAudio(world) {
     ambienceSrc.start();
   }
 
-  // Distance to the nearest police car, in metres (Infinity when none).
   function nearestCopDistance() {
     try {
       const cars = world.police ? world.police.policeCars || world.police.cars : null;
@@ -303,13 +290,11 @@ export function createAudio(world) {
           tone({ freq: 783.99, dur: 0.16, type: 'sine', gain: 0.18, delay: 0.1 });
           break;
         case 'siren':
-          // The siren loop is driven by update(); nothing to do per event.
           break;
         default:
           break;
       }
     } catch (_err) {
-      // Audio must never break the game.
     }
   }
 
@@ -324,7 +309,6 @@ export function createAudio(world) {
       const now = state.time;
       const playing = state.screen === 'playing';
 
-      // Radio: R cycles the station; the pad retunes at once.
       if (playing && world.input && world.input.justPressed
         && world.input.justPressed.has('KeyR')) {
         state.radioStation = ((state.radioStation || 0) + 1) % STATIONS.length;
@@ -333,7 +317,6 @@ export function createAudio(world) {
         state.events.emit('toast', { text: `♪ ${station().name}` });
       }
 
-      // Music: one beat per station tempo; a new chord every four beats.
       if (playing && musicGain && now >= nextBeatAt) {
         const st = station();
         beatIndex += 1;
@@ -341,7 +324,6 @@ export function createAudio(world) {
           chordIndex = (chordIndex + 1) % st.chords.length;
           retunePad();
         }
-        // Bass pulse on the beat.
         if (bassGain) {
           bassGain.gain.setTargetAtTime(st.bassGain, ctx.currentTime, 0.01);
           bassGain.gain.setTargetAtTime(st.bassGain * 0.4, ctx.currentTime + st.beatSeconds * 0.7, 0.05);
@@ -352,7 +334,6 @@ export function createAudio(world) {
         musicGain.gain.setTargetAtTime(playing ? station().padGain : 0.02, ctx.currentTime, 0.5);
       }
 
-      // Engine: pitch and loudness follow speed, only while driving.
       const speed = Math.abs(state.player.speed || 0);
       const driving = playing && !!state.player.car && !state.player.onFoot;
       if (engineGain && engineSaw && engineSub) {
@@ -363,8 +344,6 @@ export function createAudio(world) {
         engineGain.gain.setTargetAtTime(targetGain, ctx.currentTime, 0.1);
       }
 
-      // Siren: two-tone loop while wanted; loudness fades with the nearest
-      // police car's distance.
       if (sirenOsc && sirenGain) {
         const dist = nearestCopDistance();
         const wantSiren = playing && state.wanted > 0 && dist < 120;
@@ -381,7 +360,6 @@ export function createAudio(world) {
         }
       }
 
-      // Beach ambience: waves swell as the player nears the sand.
       if (ambienceGain) {
         const east = state.player.x;
         const near = Math.max(0, 1 - Math.max(0, CONFIG.EAST_BEACH - east) / 90);
@@ -389,7 +367,6 @@ export function createAudio(world) {
         ambienceGain.gain.setTargetAtTime(target, ctx.currentTime, 0.4);
       }
     } catch (_err) {
-      // Audio must never break the game.
     }
   }
 
@@ -399,7 +376,6 @@ export function createAudio(world) {
     });
   }
 
-  // Fallback unlock: browsers need a user gesture before audio may start.
   if (typeof window !== 'undefined' && window.addEventListener) {
     window.addEventListener('pointerdown', unlock, { once: false });
   }

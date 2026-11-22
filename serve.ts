@@ -21,7 +21,17 @@ function pickPort() {
   return 8080;
 }
 
+// --host lets the game be reached from another device on the same network
+// (for example a phone); it defaults to localhost, so nothing is exposed
+// unless the flag is given.
+function pickHost() {
+  const at = args.indexOf('--host');
+  if (at === -1) return '127.0.0.1';
+  return args[at + 1] ?? '127.0.0.1';
+}
+
 const port = pickPort();
+const host = pickHost();
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -93,6 +103,6 @@ createServer((request, response) => {
     return;
   }
   createReadStream(file).pipe(response);
-}).listen(port, '127.0.0.1', () => {
-  console.log(`Solmar Bay is on http://localhost:${port}`);
+}).listen(port, host, () => {
+  console.log(`Solmar Bay is on http://${host}:${port}`);
 });

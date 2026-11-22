@@ -60,7 +60,16 @@ function copyScreenshots() {
   mkdirSync(dst, { recursive: true });
   if (!existsSync(src)) return 0;
   cpSync(src, dst, { recursive: true });
-  return readdirSync(dst).filter((name) => !name.startsWith('.')).length;
+  const names = readdirSync(dst).filter((name) => !name.startsWith('.'));
+  // The scorer refuses a screenshot over 256 KiB, so refuse it here first
+  // instead of handing in an entry that is rejected at the gate.
+  for (const name of names) {
+    const size = statSync(join(dst, name)).size;
+    if (size > DOSSIER_OPTIONS.screenshots.max_bytes) {
+      throw new Error(`screenshot ${name} is ${size} bytes, over the 256 KiB cap`);
+    }
+  }
+  return names.length;
 }
 
 const gameFiles = copyGame();

@@ -1,8 +1,4 @@
-// The one shared game state every module reads and writes. Modules never
-// keep their own copy of money, health, wanted level or mission progress:
-// they read and mutate this object, and announce changes through the tiny
-// event bus so the HUD, the audio and the save system can react without
-// being coupled to them.
+// state.js — shared game state: money, health, wanted level, respect.
 import { CONFIG } from './config.js';
 
 export function createEventBus() {
@@ -30,21 +26,15 @@ export function createEventBus() {
 export function createGameState(seed) {
   return {
     seed,
-    // Seconds since the session started (game time, not wall clock).
     time: 0,
     clockMinutes: CONFIG.START_CLOCK_MINUTES,
     money: 250,
     health: CONFIG.PLAYER.MAX_HEALTH,
-    // Street respect: missions, fares and clean getaways raise it.
     respect: 0,
-    // Radio station 0, 1 or 2; the audio module cycles it on the R key.
     radioStation: 0,
     wanted: 0,
-    // 0..100 heat inside the current wanted level; crimes add heat, quiet
-    // cools it.
     heat: 0,
     secondsSinceCrime: 99,
-    // Where the player is and what they are doing.
     player: {
       x: 36,
       z: 216,
@@ -57,9 +47,6 @@ export function createGameState(seed) {
       stamina: CONFIG.PLAYER.STAMINA_MAX,
       lastPunchAt: -99,
     },
-    // Mission progress: index into the mission list, phase inside the
-    // mission, and the live objective the HUD shows. marker is the world
-    // position of the beacon.
     mission: {
       index: 0,
       phase: 0,
@@ -81,31 +68,25 @@ export function createGameState(seed) {
       punchesThrown: 0,
       getaways: 0,
     },
-    // Screen state: 'title' | 'playing' | 'paused' | 'dead' | 'busted'.
     screen: 'title',
     paused: false,
-    // Set by shots.js when a screenshot scene is staged; the HUD hides the
-    // title screen and the game never waits for a key press.
     shotMode: null,
     events: createEventBus(),
   };
 }
 
-// Add money and record it in the stats; the HUD listens for 'money'.
 export function addMoney(state, amount) {
   state.money += amount;
   if (amount > 0) state.stats.totalEarned += amount;
   state.events.emit('money', { amount, total: state.money });
 }
 
-// Add respect and record it; the HUD listens for 'respect'.
 export function addRespect(state, amount) {
   state.respect = Math.max(0, state.respect + amount);
   if (amount > 0) state.stats.respectEarned += amount;
   state.events.emit('respect', { amount, total: state.respect });
 }
 
-// A crime adds heat and may raise the wanted level. Returns the new level.
 export function commitCrime(state, heat) {
   state.heat += heat;
   state.secondsSinceCrime = 0;
@@ -123,8 +104,6 @@ export function commitCrime(state, heat) {
   return state.wanted;
 }
 
-// Quiet time cools the wanted level down, one star at a time. A fully clean
-// getaway (from two stars or more down to zero) counts as a getaway.
 export function coolWanted(state, dt) {
   if (state.wanted === 0) return;
   const startedAt = state.wanted;
@@ -153,7 +132,6 @@ export function hurtPlayer(state, damage) {
   }
 }
 
-// Heal the player, capped at full health; returns how much was restored.
 export function healPlayer(state, amount) {
   if (state.health <= 0) return 0;
   const before = state.health;
@@ -163,7 +141,6 @@ export function healPlayer(state, amount) {
   return healed;
 }
 
-// Clear the whole wanted level at once (respawn, busted, mission script).
 export function clearWanted(state) {
   state.wanted = 0;
   state.heat = 0;

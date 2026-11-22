@@ -1,10 +1,6 @@
-// Solmar Bay — textures painted in code. Every texture is generated at load
-// time on a 2D canvas: no image files, no network requests, no outside
-// assets. Each maker hands back a three.js canvas texture with repeat
-// wrapping and sRGB colour, ready for the city builder to tile freely.
+// textures.js — procedural canvas textures: facades, roads, neon, sand.
 import * as THREE from 'three';
 
-// A blank canvas of the requested size.
 function blankCanvas(w, h) {
   const c = document.createElement('canvas');
   c.width = w;
@@ -12,7 +8,6 @@ function blankCanvas(w, h) {
   return c;
 }
 
-// Finish a canvas as a tilable texture.
 function finishTexture(c, anisotropy = 4) {
   const t = new THREE.CanvasTexture(c);
   t.wrapS = THREE.RepeatWrapping;
@@ -22,7 +17,6 @@ function finishTexture(c, anisotropy = 4) {
   return t;
 }
 
-// Scatter light and dark grains so a flat fill reads as a real surface.
 function grain(ctx, w, h, count, rng, strength) {
   for (let i = 0; i < count; i += 1) {
     const pick = rng ? rng.next() : Math.random();
@@ -33,8 +27,6 @@ function grain(ctx, w, h, count, rng, strength) {
   }
 }
 
-// Draw one window cell: glass, an optional warm lit pane, a sill and a top
-// highlight so the facade has depth at a glance.
 function paintWindow(ctx, x, y, w, h, glass, lit, roll) {
   ctx.fillStyle = roll < 0.16 ? lit : (roll < 0.24 ? '#161c22' : glass);
   ctx.fillRect(x, y, w, h);
@@ -45,22 +37,15 @@ function paintWindow(ctx, x, y, w, h, glass, lit, roll) {
 }
 
 const FACADES = {
-  // Warm Mediterranean stucco.
   stucco: { base: '#e6d3ac', trim: '#c9b088', glass: '#33414f', lit: '#ffd98a' },
-  // Blue glass tower.
   glass: { base: '#6ea8cf', trim: '#4f86ad', glass: '#d6ecff', lit: '#ffe9a8' },
-  // Red-brown brick.
   brick: { base: '#9d5a41', trim: '#7e4632', glass: '#2c3844', lit: '#ffd98a' },
-  // Sun-faded pastel (base picked per building).
   pastel: { base: null, trim: '#ffffff', glass: '#33414f', lit: '#ffd98a' },
-  // Plain grey concrete.
   concrete: { base: '#9aa0a2', trim: '#7d8386', glass: '#2f3a44', lit: '#ffd98a' },
 };
 
 const PASTEL_PAINTS = ['#f0b7c2', '#a9d6c5', '#f6d47c', '#b3c6ef', '#e8c39e', '#c9e2a8'];
 
-// Facade texture: one 256x256 tile covers roughly a 14m x 14m wall patch.
-// The city repeats it per building so windows keep the same size everywhere.
 export function makeBuildingTexture(rng, paletteName) {
   const pal = FACADES[paletteName] || FACADES.concrete;
   const base = pal.base || rng.pick(PASTEL_PAINTS);
@@ -71,7 +56,6 @@ export function makeBuildingTexture(rng, paletteName) {
   ctx.fillRect(0, 0, 256, 256);
   grain(ctx, 256, 256, 500, rng, 0.06);
 
-  // Brick courses for the brick palette, horizontal joints for the rest.
   if (paletteName === 'brick') {
     ctx.fillStyle = 'rgba(0,0,0,0.16)';
     for (let y = 8; y < 256; y += 16) ctx.fillRect(0, y, 256, 2);
@@ -97,7 +81,6 @@ export function makeBuildingTexture(rng, paletteName) {
       const x = padX + col * cellW + 5;
       const y = padY + r * cellH + 4;
       paintWindow(ctx, x, y, cellW - 10, cellH - 8, pal.glass, pal.lit, rng.next());
-      // Every few windows gets a balcony rail underneath.
       if (rng.next() < 0.12) {
         ctx.fillStyle = 'rgba(20,24,30,0.8)';
         ctx.fillRect(x - 2, y + cellH - 4, cellW - 6, 3);
@@ -105,7 +88,6 @@ export function makeBuildingTexture(rng, paletteName) {
     }
   }
 
-  // Ground floor: darker shopfront band, a trim line and a door.
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
   ctx.fillRect(0, 226, 256, 30);
   ctx.fillStyle = pal.trim;
@@ -118,7 +100,6 @@ export function makeBuildingTexture(rng, paletteName) {
   return finishTexture(c);
 }
 
-// Tall glass tower facade: floor-to-ceiling strips with a reflective sheen.
 export function makeGlassTowerTexture(rng) {
   const c = blankCanvas(256, 256);
   const ctx = c.getContext('2d');
@@ -146,8 +127,6 @@ export function makeGlassTowerTexture(rng) {
   return finishTexture(c);
 }
 
-// Brick facade on its own (for the old-town blocks that want the coursing
-// without the window grid of the generic maker).
 export function makeBrickTexture(rng) {
   const c = blankCanvas(256, 256);
   const ctx = c.getContext('2d');
@@ -163,9 +142,6 @@ export function makeBrickTexture(rng) {
   return finishTexture(c);
 }
 
-// Asphalt road tile: 256x256 stands for a 12m-wide, 24m-long road slice.
-// The dashed yellow centre line runs along the canvas vertical (v) axis;
-// the city rotates the geometry for east-west roads so dashes follow them.
 export function makeRoadTexture() {
   const c = blankCanvas(256, 256);
   const ctx = c.getContext('2d');
@@ -173,17 +149,14 @@ export function makeRoadTexture() {
   ctx.fillRect(0, 0, 256, 256);
   grain(ctx, 256, 256, 900, null, 0.08);
 
-  // Faint tyre-wear bands where wheels run.
   ctx.fillStyle = 'rgba(0,0,0,0.14)';
   ctx.fillRect(58, 0, 34, 256);
   ctx.fillRect(164, 0, 34, 256);
 
-  // Solid edge lines.
   ctx.fillStyle = 'rgba(216,216,216,0.55)';
   ctx.fillRect(7, 0, 3, 256);
   ctx.fillRect(246, 0, 3, 256);
 
-  // Dashed yellow centre line: two dashes per tile.
   ctx.fillStyle = '#e8c33c';
   ctx.fillRect(124, 12, 8, 64);
   ctx.fillRect(124, 140, 8, 64);
@@ -191,7 +164,6 @@ export function makeRoadTexture() {
   return finishTexture(c);
 }
 
-// Light concrete pavement tile with expansion-joint grid lines.
 export function makeSidewalkTexture() {
   const c = blankCanvas(128, 128);
   const ctx = c.getContext('2d');
@@ -207,7 +179,6 @@ export function makeSidewalkTexture() {
   return finishTexture(c);
 }
 
-// Beach sand tile with speckles and a few tiny shells.
 export function makeSandTexture() {
   const c = blankCanvas(256, 256);
   const ctx = c.getContext('2d');
@@ -227,7 +198,6 @@ export function makeSandTexture() {
   return finishTexture(c);
 }
 
-// Park grass tile: green base, blade speckles and a few clover dots.
 export function makeGrassTexture(rng) {
   const c = blankCanvas(256, 256);
   const ctx = c.getContext('2d');
@@ -249,7 +219,6 @@ export function makeGrassTexture(rng) {
   return finishTexture(c);
 }
 
-// Weathered pier planks: long boards with gaps and nail heads.
 export function makePierWoodTexture(rng) {
   const c = blankCanvas(256, 256);
   const ctx = c.getContext('2d');
@@ -268,7 +237,6 @@ export function makePierWoodTexture(rng) {
   return finishTexture(c);
 }
 
-// Sports turf: striped mowing bands with a white touchline.
 export function makeTurfTexture() {
   const c = blankCanvas(256, 256);
   const ctx = c.getContext('2d');
@@ -287,7 +255,6 @@ export function makeTurfTexture() {
   return finishTexture(c);
 }
 
-// Zebra-crossing tile laid over a road at an intersection.
 export function makeCrosswalkTexture() {
   const c = blankCanvas(256, 256);
   const ctx = c.getContext('2d');
@@ -301,8 +268,6 @@ export function makeCrosswalkTexture() {
   return finishTexture(c);
 }
 
-// Billboard / shop sign. opts: { bg, fg, border, sub }.
-// Text is shrunk to fit; one line plus an optional smaller sub-line.
 export function makeSignTexture(text, opts) {
   const o = opts || {};
   const c = blankCanvas(512, 256);
@@ -332,8 +297,6 @@ export function makeSignTexture(text, opts) {
   return finishTexture(c);
 }
 
-// Neon sign: glowing letters on a dark plate, for downtown towers after
-// dusk. opts: { glow, bg } — glow is the tube colour.
 export function makeNeonTexture(text, opts) {
   const o = opts || {};
   const glow = o.glow || '#ff4d7e';
@@ -360,7 +323,6 @@ export function makeNeonTexture(text, opts) {
   return finishTexture(c);
 }
 
-// Rooftop gravel: dark aggregate with tar seams, for flat tower roofs.
 export function makeRoofTexture(rng) {
   const c = blankCanvas(128, 128);
   const ctx = c.getContext('2d');

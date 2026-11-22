@@ -1,7 +1,4 @@
-// Solmar Bay — the police. Patrol-car chases, foot cops, arrests, roadblocks
-// and, at the highest heat, a helicopter with a searchlight. Everything is
-// driven by the wanted level in the shared state: zero stars means no police
-// presence at all, five stars means the whole city is after Nova.
+// police.js — chases, PIT maneuvers, foot cops, roadblocks, helicopter.
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { Car, getPlayerCar } from './vehicles.js';
@@ -13,7 +10,6 @@ const COP_SKINS = [0xe8b88a, 0xc98d5f, 0x8a5a3b, 0xf0c8a0, 0x6e4426];
 const TRACER_COUNT = 10;
 const TRACER_LIFE = 0.15;
 
-// Fallback spawn nodes if the city module ever ships without a road graph.
 function fallbackNodes() {
   const nodes = [];
   for (const x of CONFIG.ROAD_LINES) {
@@ -35,7 +31,6 @@ export function createPolice(world) {
   const cops = []; // { mesh, x, z, bustTimer, shootTimer, phase }
   const roadblocks = []; // { car: Car, life: number }
 
-  // Small pool of short-lived tracer lines for cop gunfire.
   const tracers = [];
   let tracerIdx = 0;
   for (let i = 0; i < TRACER_COUNT; i += 1) {
@@ -49,8 +44,6 @@ export function createPolice(world) {
     tracers.push({ line, life: 0 });
   }
 
-  // The helicopter: a simple body, tail and spinning rotor, with a cone of
-  // light that tracks the player. Built once, hidden until needed.
   const heli = new THREE.Group();
   const heliBody = new THREE.Mesh(
     new THREE.BoxGeometry(3.2, 1.6, 5),
@@ -121,15 +114,12 @@ export function createPolice(world) {
     policeCars.splice(i, 1);
   }
 
-  // Two police cars parked across the road ahead of the player, forming a
-  // wall. The player can smash through, U-turn, or go around the block.
   function placeRoadblock() {
     const p = state.player;
     const fx = Math.sin(p.yaw);
     const fz = Math.cos(p.yaw);
     const cx = p.x + fx * 48;
     const cz = p.z + fz * 48;
-    // Sideways offsets put the cars across the road, nose to nose.
     const rx = -fz;
     const rz = fx;
     for (const side of [-1, 1]) {
@@ -187,14 +177,12 @@ export function createPolice(world) {
     const pz = state.player.z;
     const playerCar = getPlayerCar(state);
 
-    // Siren: emit only when the on/off state changes; audio listens for it.
     const wantSiren = wanted > 0;
     if (wantSiren !== sirenOn) {
       sirenOn = wantSiren;
       state.events.emit('sfx', { name: 'siren', on: sirenOn });
     }
 
-    // --- Police cars ------------------------------------------------------
     const desired = wanted === 0 ? 0 : Math.min(wanted + 1, CONFIG.POLICE.MAX_CARS);
     while (policeCars.length < desired) {
       const before = policeCars.length;
@@ -217,7 +205,6 @@ export function createPolice(world) {
       entry.ramCooldown = Math.max(0, (entry.ramCooldown || 0) - dt);
       entry.pitCooldown = Math.max(0, (entry.pitCooldown || 0) - dt);
 
-      // Ramming the player's car: damage (once per second per car) + shove.
       if (playerCar && !state.player.onFoot && entry.ramCooldown <= 0) {
         if (circlesOverlap(car.x, car.z, car.radius, playerCar.x, playerCar.z, playerCar.radius)) {
           entry.ramCooldown = 1;
@@ -228,8 +215,6 @@ export function createPolice(world) {
         }
       }
 
-      // PIT maneuver: when a cruiser pulls alongside the player's car at
-      // speed, it steers into the rear quarter and spins the player out.
       if (playerCar && !state.player.onFoot && entry.pitCooldown <= 0
         && Math.abs(playerCar.speed) > 15 && dist < 5.5 && dist > 2.5) {
         const sideX = playerCar.x - car.x;
@@ -250,8 +235,6 @@ export function createPolice(world) {
       }
     }
 
-    // Police cars collide with each other and with traffic (traffic's own
-    // update does not know about police cars).
     const trafficCars = world.traffic && world.traffic.cars ? world.traffic.cars : [];
     for (let i = 0; i < policeCars.length; i += 1) {
       const a = policeCars[i].car;
@@ -273,7 +256,6 @@ export function createPolice(world) {
       a.sync();
     }
 
-    // --- Roadblocks -------------------------------------------------------
     roadblockTimer -= dt;
     if (wanted >= CONFIG.POLICE.ROADBLOCK_STARS && playing && !state.player.onFoot
       && roadblocks.length === 0 && roadblockTimer <= 0) {
@@ -290,7 +272,6 @@ export function createPolice(world) {
         roadblocks.splice(i, 1);
         continue;
       }
-      // A roadblock car is a wall: ramming it hurts, like any crash.
       if (playerCar && circlesOverlap(rb.car.x, rb.car.z, rb.car.radius, playerCar.x, playerCar.z, playerCar.radius)) {
         playerCar.pushFrom(rb.car.x, rb.car.z, rb.car.radius);
         if (Math.abs(playerCar.speed) > 10) {
@@ -302,7 +283,6 @@ export function createPolice(world) {
       rb.car.sync();
     }
 
-    // --- Helicopter -------------------------------------------------------
     const wantHeli = wanted >= CONFIG.POLICE.HELICOPTER_STARS && playing;
     heli.visible = wantHeli;
     if (wantHeli) {
@@ -312,11 +292,9 @@ export function createPolice(world) {
       heli.position.set(hx, 46 + Math.sin(state.time * 0.8) * 1.5, hz);
       heli.rotation.y = -heliAngle;
       heliRotor.rotation.y += dt * 22;
-      // The searchlight sweeps: its glow breathes as the helicopter circles.
       heliLight.material.opacity = 0.10 + Math.sin(state.time * 2.2) * 0.04;
     }
 
-    // --- Foot cops ----------------------------------------------------------
     const wantCops = wanted >= 2 ? Math.min(wanted, 5) : 0;
     while (cops.length < wantCops) spawnCop();
     while (cops.length > wantCops) {
@@ -346,7 +324,6 @@ export function createPolice(world) {
       const cl = clampToWorld(cop.x, cop.z, 0.7);
       cop.x = cl.x;
       cop.z = cl.z;
-      // Don't overlap the player's car; cops crowd around it instead.
       if (playerCar && !state.player.onFoot) {
         const dc = Math.hypot(cop.x - playerCar.x, cop.z - playerCar.z);
         const minD = playerCar.radius + 0.7;
@@ -367,7 +344,6 @@ export function createPolice(world) {
         parts.armR.rotation.x = s * 0.55;
       }
 
-      // Busted: a cop stays within arm's reach of an on-foot player for 1.5s.
       if (playing && state.player.onFoot && dist < 1.3) {
         cop.bustTimer += dt;
         if (cop.bustTimer >= 1.5) {
@@ -380,7 +356,6 @@ export function createPolice(world) {
         cop.bustTimer = 0;
       }
 
-      // At 3+ stars cops shoot: one hit every 1.2s per cop inside 30m.
       cop.shootTimer -= dt;
       if (playing && wanted >= 3 && dist < 30 && cop.shootTimer <= 0) {
         cop.shootTimer = 1.2;
@@ -390,7 +365,6 @@ export function createPolice(world) {
       }
     }
 
-    // Fade tracers out.
     for (const t of tracers) {
       if (t.life <= 0) continue;
       t.life -= dt;

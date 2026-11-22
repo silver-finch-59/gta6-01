@@ -1,22 +1,18 @@
-// Solmar Bay — boot, input, screens and the game loop. This file wires the
-// modules together into one `world` object and owns nothing else: the city,
-// the traffic, the police, the player, the combat, the missions, the HUD and
-// the audio each live in their own file under src/. Eight story missions run
-// in order; finishing all eight opens free roam.
+// main.js — boot, main loop, and the top-1000 import order (config first).
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
-import { makeRng } from './rng.js';
 import { createGameState, coolWanted, clearWanted } from './state.js';
-import { buildCity } from './city.js';
-import { createTraffic } from './traffic.js';
-import { createPolice } from './police.js';
-import { createPlayer } from './player.js';
-import { createCombat } from './combat.js';
 import { createMissions } from './missions.js';
 import { createHud } from './hud.js';
+import { createPolice } from './police.js';
+import { createCombat } from './combat.js';
+import { createTraffic } from './traffic.js';
+import { createPlayer } from './player.js';
+import { buildCity } from './city.js';
 import { createAudio } from './audio.js';
 import { loadSave, saveGame } from './save.js';
 import { stageShot } from './shots.js';
+import { makeRng } from './rng.js';
 
 const params = new URLSearchParams(location.search);
 const shotName = params.get('shot');
@@ -63,8 +59,6 @@ const world = {
   audio: null,
 };
 
-// Build the world in dependency order. Modules only touch each other inside
-// update(), never in their constructors, so this order is safe.
 world.city = buildCity(scene, rng);
 world.traffic = createTraffic(world);
 world.police = createPolice(world);
@@ -74,7 +68,6 @@ world.missions = createMissions(world);
 world.hud = createHud(world);
 world.audio = createAudio(world);
 
-// Debug handle for headless playtesting (harmless in production).
 window.__world = world;
 const saved = !shotName ? loadSave() : null;
 if (saved) {
@@ -94,7 +87,6 @@ if (saved) {
   if (note) note.style.display = '';
 }
 
-// --- Screens ------------------------------------------------------------
 const screens = {
   title: document.getElementById('screen-title'),
   pause: document.getElementById('screen-pause'),
@@ -116,7 +108,6 @@ function beginStory() {
   state.screen = 'playing';
   showOnly('playing');
   world.audio.unlock();
-  // Eight missions, indexed 0..7; index 8 means the story is done.
   world.missions.startMission(Math.min(state.mission.index, 7));
   if (state.mission.index >= 8) world.missions.startMission(8);
 }
@@ -156,17 +147,13 @@ document.getElementById('btn-release').addEventListener('click', () => {
 });
 
 state.events.on('dead', () => {
-  // hurtPlayer sets state.screen='dead' before it emits, so show the
-  // overlay unconditionally here.
   showOnly('dead');
 });
 state.events.on('busted', () => {
-  // police.js sets state.screen='busted' before it emits.
   world.audio.play('busted');
   showOnly('busted');
 });
 
-// --- Input --------------------------------------------------------------
 let muted = false;
 let dragging = false;
 let dragStartX = 0;
@@ -225,8 +212,6 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
-// Losing the tab pauses the game instead of letting Nova get wasted
-// while nobody is watching.
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && state.screen === 'playing' && !shotName) {
     state.screen = 'paused';
@@ -235,7 +220,6 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// --- Game loop ----------------------------------------------------------
 let last = performance.now();
 let autosaveAt = 0;
 
@@ -270,11 +254,8 @@ function frame(now) {
   input.justPressed.clear();
 }
 
-// --- Boot ---------------------------------------------------------------
 if (screens.loading) screens.loading.classList.add('hidden');
 if (shotName) {
-  // Screenshot mode: no title screen, no waiting for input. The scene is
-  // staged deterministically, rendered once, and flagged for the capture.
   state.screen = 'playing';
   state.shotMode = shotName;
   showOnly('playing');

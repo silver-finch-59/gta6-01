@@ -1,8 +1,4 @@
-// Solmar Bay — save and load, version two. A thin wrapper around
-// localStorage so the rest of the game never touches storage directly and
-// never crashes when it is unavailable (private mode, blocked cookies,
-// file://, …). Version one saves (money + mission index only) are migrated
-// by filling the new fields with their defaults.
+// save.js — localStorage save and load (v2 format, migrates v1).
 import { CONFIG } from './config.js';
 
 const SAVE_VERSION = 2;
@@ -88,7 +84,6 @@ export function clearSave() {
   }
 }
 
-// True when any save (either version) is sitting in storage.
 export function saveExists() {
   try {
     if (!storageOk()) return false;

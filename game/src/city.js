@@ -1,10 +1,4 @@
-// Solmar Bay — the city builder. From the grid in config.js it raises the
-// whole visible world: ground, roads, sidewalks, crosswalks, district
-// buildings, the beach and ocean, the marina, the harbor, a pier, a park, a
-// sports field, props, billboards, sky and sun. It hands back the collision
-// boxes, the road graph, the sidewalk segments, the spawn points, the
-// package spots and the stunt ramps that traffic, missions and the screenshot
-// staging all run on.
+// city.js — the city: roads, buildings, beach, ocean, pier, day/night light.
 import * as THREE from 'three';
 import { CONFIG, districtAt, phaseOfDay } from './config.js';
 import {
@@ -23,11 +17,8 @@ import {
 } from './textures.js';
 
 const LINES = CONFIG.ROAD_LINES; // [-252,-180,-108,-36,36,108,180,252]
-// Buildings sit at least 4 m inside the block edge, so the strip between
-// the road edge (6 m) and the building face (10 m) stays clear sidewalk.
 const EDGE_CLEARANCE = 4;
 
-// Spawn points: all on road centrelines or intersections, never in a block.
 const SPAWN_POINTS = {
   player: { x: 36, z: 216, yaw: Math.PI },
   garage: { x: 36, z: 252 },
@@ -42,9 +33,6 @@ const SPAWN_POINTS = {
   park: { x: -36, z: -108 },
 };
 
-// Package spots: twelve, one sidewalk corner each (8.5 m off both road
-// centrelines — on the pavement, clear of every building face), spread over
-// Downtown, Old Town, Marina, Harbor, Beachfront and the Hills.
 const PACKAGE_SPOTS = [
   { x: 44.5, z: 44.5 }, // Downtown
   { x: -44.5, z: -44.5 }, // Downtown
@@ -60,16 +48,12 @@ const PACKAGE_SPOTS = [
   { x: -171.5, z: -27.5 }, // Old Town
 ];
 
-// Stunt ramps sit on road centrelines, facing along the road.
 const RAMP_SPOTS = [
   { x: 36, z: 0, yaw: Math.PI / 2 },
   { x: -108, z: 108, yaw: 0 },
   { x: 180, z: -36, yaw: 0 },
 ];
 
-// Billboards: freestanding signs on sidewalk corners (9 m off both road
-// centrelines — inside the clear margin strip, never inside a building).
-// Every name is invented for Solmar Bay.
 const BILLBOARDS = [
   { x: -27, z: -27, text: 'SOLMAR BAY', sub: 'WELCOME TO THE BAY', bg: '#1d2f4a' },
   { x: 45, z: 243, text: "DOM'S GARAGE", sub: 'REPAIRS • TUNING', bg: '#3a2a12' },
@@ -111,7 +95,6 @@ export function buildCity(scene, rng) {
   let hemi = null;
   let lampGlowMat = null;
 
-  // ----- sky, fog and light (late afternoon, sun low in the west) -----
   scene.background = new THREE.Color(0xf2a35e);
   scene.fog = new THREE.Fog(0xeeb27a, 320, 950);
 
@@ -133,7 +116,6 @@ export function buildCity(scene, rng) {
   hemi = new THREE.HemisphereLight(0xffe0b3, 0x8a7a5a, 0.85);
   scene.add(hemi);
 
-  // ----- shared materials and geometry -----
   const unitBox = new THREE.BoxGeometry(1, 1, 1);
   const mats = {
     roof: new THREE.MeshStandardMaterial({ color: 0x3c3f45, roughness: 1 }),
@@ -170,8 +152,6 @@ export function buildCity(scene, rng) {
     color: 0xfff2c0, emissive: 0xffd98a, emissiveIntensity: 0.15, roughness: 0.4,
   });
 
-  // Facade textures are cached per palette; each building clones its texture
-  // so the window grid can repeat to match that building's size.
   const facadeCache = new Map();
   function facadeMaterial(palette, w, h) {
     if (!facadeCache.has(palette)) {
@@ -197,12 +177,10 @@ export function buildCity(scene, rng) {
     return m;
   }
 
-  // ----- ground -----
   const groundGeo = new THREE.PlaneGeometry(624, 576);
   groundGeo.rotateX(-Math.PI / 2);
   place(groundGeo, mats.ground, 24, 0, 0, false, true);
 
-  // ----- roads -----
   const roadTex = makeRoadTexture();
   const roadNSGeo = new THREE.PlaneGeometry(CONFIG.ROAD_WIDTH, 576);
   roadNSGeo.rotateX(-Math.PI / 2);
@@ -220,7 +198,6 @@ export function buildCity(scene, rng) {
     place(roadEWGeo, new THREE.MeshStandardMaterial({ map: texEW, roughness: 0.95 }), -9, 0.01, L, false, true);
   }
 
-  // ----- sidewalks (visual strips + the segments pedestrians walk) -----
   const sidewalkTex = makeSidewalkTexture();
   const walkNSGeo = new THREE.PlaneGeometry(4, 576);
   walkNSGeo.rotateX(-Math.PI / 2);
@@ -243,7 +220,6 @@ export function buildCity(scene, rng) {
     }
   }
 
-  // ----- crosswalks at every intersection -----
   const crossTex = makeCrosswalkTexture();
   const crossGeo = new THREE.PlaneGeometry(CONFIG.ROAD_WIDTH, CONFIG.ROAD_WIDTH);
   crossGeo.rotateX(-Math.PI / 2);
@@ -254,7 +230,6 @@ export function buildCity(scene, rng) {
     }
   }
 
-  // ----- beach sand + ocean -----
   const sandTex = makeSandTexture();
   sandTex.repeat.set(2, 22);
   const sandGeo = new THREE.PlaneGeometry(52, 576);
@@ -265,7 +240,6 @@ export function buildCity(scene, rng) {
   oceanGeo.rotateX(-Math.PI / 2);
   ocean = place(oceanGeo, mats.ocean, 402, 0.12, 0, false, false);
 
-  // ----- marina basin (south-east water) + docks + boats -----
   const basinGeo = new THREE.PlaneGeometry(72, 60);
   basinGeo.rotateX(-Math.PI / 2);
   place(basinGeo, mats.basin, 222, 0.1, 258, false, false);
@@ -293,8 +267,6 @@ export function buildCity(scene, rng) {
     boats.push(g);
   }
 
-  // ----- the pier: wooden deck reaching east over the ocean, with stalls
-  // and a ferris-wheel silhouette at its end -----
   const pierDeckGeo = new THREE.BoxGeometry(52, 0.4, 8);
   place(pierDeckGeo, mats.pierWood, 296, 0.5, 120, false, true);
   colliders.push({ minX: 270, maxX: 322, minZ: 115, maxZ: 125 });
@@ -313,7 +285,6 @@ export function buildCity(scene, rng) {
     stall.castShadow = true;
     scene.add(stall);
   }
-  // Ferris wheel: a ring of cabins on two legs, slowly turning in update.
   const wheel = new THREE.Group();
   const wheelRim = new THREE.Mesh(
     new THREE.TorusGeometry(9, 0.35, 8, 24),
@@ -339,7 +310,6 @@ export function buildCity(scene, rng) {
   wheel.position.set(318, 12, 120);
   scene.add(wheel);
 
-  // ----- buildings, plazas, parking lots, harbor yard -----
   const blockXs = [-273, -216, -144, -72, 0, 72, 144, 216];
   const blockZs = [-273, -216, -144, -72, 0, 72, 144, 216, 273];
   const palmSpots = [];
@@ -353,7 +323,6 @@ export function buildCity(scene, rng) {
     m.receiveShadow = true;
     scene.add(m);
     colliders.push({ minX: cx - w / 2, maxX: cx + w / 2, minZ: cz - d / 2, maxZ: cz + d / 2 });
-    // Rooftop clutter: AC box, antenna or water tank.
     const kind = rng.next();
     if (h > 24 || kind < 0.55) {
       const rw = rng.range(3, Math.min(8, w * 0.3));
@@ -377,7 +346,6 @@ export function buildCity(scene, rng) {
         scene.add(roof);
       }
     }
-    // Glowing neon on tall downtown towers.
     if (h >= 55 && rng.chance(0.45)) {
       const sign = NEON_SIGNS[Math.floor(rng.next() * NEON_SIGNS.length)];
       const tex = makeNeonTexture(sign.text, { glow: sign.glow });
@@ -457,7 +425,6 @@ export function buildCity(scene, rng) {
   }
 
   function layPark(cx, cz) {
-    // Green park: grass, a pond, paths and benches.
     const grassGeo = new THREE.PlaneGeometry(56, 56);
     grassGeo.rotateX(-Math.PI / 2);
     place(grassGeo, mats.grass, cx, 0.02, cz, false, true);
@@ -475,7 +442,6 @@ export function buildCity(scene, rng) {
   }
 
   function laySportsField(cx, cz) {
-    // Fenced turf pitch with goals at each end.
     const turfGeo = new THREE.PlaneGeometry(52, 36);
     turfGeo.rotateX(-Math.PI / 2);
     place(turfGeo, mats.turf, cx, 0.02, cz, false, true);
@@ -490,7 +456,6 @@ export function buildCity(scene, rng) {
       bar.position.set(cx + side * 24, 3, cz);
       scene.add(bar);
     }
-    // The pitch stays walkable: no collider, so the player can run onto it.
   }
 
   function layContainerYard(cx, cz) {
@@ -525,13 +490,9 @@ export function buildCity(scene, rng) {
 
   for (const cx of blockXs) {
     for (const cz of blockZs) {
-      // Marina basin blocks: water + docks, no buildings.
       if ((cx === 216 && cz === 216) || (cx === 216 && cz === 273)) continue;
-      // Harbor container yard.
       if (cx === 216 && cz === -216) { layContainerYard(cx, cz); continue; }
-      // Downtown central plaza.
       if (cx === 0 && cz === 0) { layPlaza(cx, cz); continue; }
-      // Park in the Hills, sports field in Old Town.
       if (cx === -216 && cz === -144) { layPark(cx, cz); continue; }
       if (cx === -216 && cz === 144) { laySportsField(cx, cz); continue; }
       const r = rng.next();
@@ -541,7 +502,6 @@ export function buildCity(scene, rng) {
     }
   }
 
-  // ----- palm trees (beachfront row, marina dock, plazas, park) -----
   for (let z = -240; z <= 240; z += 48) palmSpots.push({ x: 276, z });
   palmSpots.push({ x: 192, z: 222 }, { x: 216, z: 222 }, { x: 240, z: 222 });
   const trunkGeo = new THREE.CylinderGeometry(0.18, 0.32, 5, 7);
@@ -565,7 +525,6 @@ export function buildCity(scene, rng) {
     scene.add(g);
   }
 
-  // ----- beach umbrellas -----
   const poleGeo = new THREE.CylinderGeometry(0.07, 0.07, 2.6, 6);
   const umbrellaGeo = new THREE.ConeGeometry(2.2, 1.1, 8);
   for (let i = 0; i < 8; i += 1) {
@@ -578,8 +537,6 @@ export function buildCity(scene, rng) {
     place(umbrellaGeo, umMat, x, 2.9, z);
   }
 
-  // ----- street lamps at alternating intersections, kept clear of
-  // packages, spawns and billboards -----
   const noLampNear = [...PACKAGE_SPOTS, ...Object.values(SPAWN_POINTS),
     ...BILLBOARDS.map((b) => ({ x: b.x, z: b.z }))];
   const lampPoleGeo = new THREE.CylinderGeometry(0.1, 0.14, 6, 6);
@@ -595,7 +552,6 @@ export function buildCity(scene, rng) {
     });
   });
 
-  // ----- traffic-light poles at the busiest downtown intersections -----
   const lightPoleGeo = new THREE.CylinderGeometry(0.12, 0.16, 7, 6);
   const lightBoxGeo = new THREE.BoxGeometry(0.5, 1.4, 0.5);
   const lightLensMat = new THREE.MeshStandardMaterial({
@@ -609,7 +565,6 @@ export function buildCity(scene, rng) {
     scene.add(lens);
   }
 
-  // ----- billboards -----
   const billPoleGeo = new THREE.CylinderGeometry(0.25, 0.3, 8, 8);
   const billGeo = new THREE.PlaneGeometry(11, 5);
   for (const b of BILLBOARDS) {
@@ -626,7 +581,6 @@ export function buildCity(scene, rng) {
     colliders.push({ minX: b.x - 1, maxX: b.x + 1, minZ: b.z - 1, maxZ: b.z + 1 });
   }
 
-  // ----- stunt ramps -----
   const rampBaseGeo = new THREE.BoxGeometry(8, 0.5, 4.5);
   const rampSlopeGeo = new THREE.BoxGeometry(7, 0.35, 4.2);
   for (const r of RAMP_SPOTS) {
@@ -644,7 +598,6 @@ export function buildCity(scene, rng) {
     scene.add(g);
   }
 
-  // ----- drifting clouds -----
   const cloudSphereGeo = new THREE.SphereGeometry(1, 10, 8);
   for (let i = 0; i < 8; i += 1) {
     const g = new THREE.Group();
@@ -661,7 +614,6 @@ export function buildCity(scene, rng) {
     clouds.push({ group: g, speed: rng.range(1.5, 3.5) });
   }
 
-  // ----- flags on the marina dock -----
   const flagPoleGeo = new THREE.CylinderGeometry(0.08, 0.1, 7, 6);
   const flagGeo = new THREE.PlaneGeometry(2.2, 1.4);
   const flagColors = [0xe84a5f, 0xffd23e, 0x2c9e8f];
@@ -676,7 +628,6 @@ export function buildCity(scene, rng) {
     flags.push(flag);
   });
 
-  // ----- road graph: one node per road intersection, edges between neighbours -----
   const nodes = [];
   for (const z of LINES) {
     for (const x of LINES) nodes.push({ x, z });
@@ -689,9 +640,6 @@ export function buildCity(scene, rng) {
     }
   }
 
-  // Day and night: the sun, sky, fog and lamps follow the game clock.
-  // update(dt, time, state) — the third argument is optional; without it the
-  // lighting stays at the late-afternoon default.
   let lastPhase = null;
   function applyPhase(phase) {
     const dn = CONFIG.DAY_NIGHT;

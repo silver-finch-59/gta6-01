@@ -4,3 +4,5 @@ out2/
 node_modules/
 .DS_Store
 *.log
+# Local screenshot captures, before the chosen ones are copied into screenshots/.
+shots-new/

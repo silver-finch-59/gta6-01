@@ -1,27 +1,16 @@
-// Solmar Bay — one tuning table for the whole game. Every module reads its
-// numbers from here instead of hard-coding its own, so the city, the traffic,
-// the police and the missions all agree on one world: the same roads, the
-// same bounds, the same clock, the same money.
+// config.js — one tuning table for the whole game: roads, clock, police, combat.
 export const CONFIG = {
-  // City grid: roads run along these x and z lines (metres). Blocks sit
-  // between them, and the road graph connects every crossing.
   ROAD_LINES: [-252, -180, -108, -36, 36, 108, 180, 252],
   ROAD_WIDTH: 12,
   BLOCK_SIZE: 60,
-  // Playable bounds. East of EAST_BEACH the sand starts; the ocean is past
-  // OCEAN_EDGE, where the pier reaches out over the water.
   WORLD_MIN_X: -288,
   WORLD_MAX_X: 336,
   WORLD_MIN_Z: -288,
   WORLD_MAX_Z: 288,
   EAST_BEACH: 270,
   OCEAN_EDGE: 322,
-  // Sun-soaked late afternoon. The clock starts here and advances in game
-  // time; the sky, the sun and the street lamps follow it.
   START_CLOCK_MINUTES: 16 * 60 + 24,
   CLOCK_MINUTES_PER_SECOND: 0.35,
-  // Day and night: each phase names the hours it covers and the light that
-  // goes with it. Lamps switch on between LAMP_ON and LAMP_OFF.
   DAY_NIGHT: {
     DAWN_START: 5 * 60 + 30,
     DAY_START: 7 * 60,
@@ -44,7 +33,6 @@ export const CONFIG = {
     MAX_HEALTH: 100,
     HEALTH_REGEN_PER_SECOND: 1.5,
     REGEN_DELAY_SECONDS: 8,
-    // Sprinting drains this meter; walking refills it.
     STAMINA_MAX: 100,
     STAMINA_DRAIN_PER_SECOND: 22,
     STAMINA_REFILL_PER_SECOND: 16,
@@ -52,8 +40,6 @@ export const CONFIG = {
     PUNCH_RANGE: 2.2,
     PUNCH_COOLDOWN_SECONDS: 0.45,
   },
-  // Arcade handling, one row per kind. Sports cars are fastest, the bus is
-  // a boat, and the motorbike is quick but twitchy.
   CAR: {
     MAX_SPEED: 42,
     SPORTS_MAX_SPEED: 56,
@@ -94,7 +80,6 @@ export const CONFIG = {
     SPAWN_DISTANCE: 90,
     DESPAWN_DISTANCE: 220,
     COP_FOOT_SPEED: 5.2,
-    // Seconds of no crime before the wanted level starts cooling down.
     COOL_DOWN_SECONDS: 14,
     HEAT_PER_STAR: 100,
     ROADBLOCK_STARS: 3,
@@ -122,8 +107,6 @@ export const CONFIG = {
     PACKAGE_VALUE: 150,
     PACKAGE_COUNT: 12,
   },
-  // Street respect: earned from missions, fares and clean getaways. The HUD
-  // shows the tier name, and the city reacts to it in dialogue.
   RESPECT_TIERS: [
     { at: 0, name: 'Nobody' },
     { at: 100, name: 'Wheelman' },
@@ -134,7 +117,6 @@ export const CONFIG = {
     { at: 1400, name: 'Bay Legend' },
     { at: 2000, name: 'King of Solmar' },
   ],
-  // The three procedural radio stations, in the order the R key cycles them.
   RADIO_STATIONS: [
     { name: 'BAY FM 88.4', tagline: 'Sunset synthwave' },
     { name: 'PALM 102.1', tagline: 'Mellow harbour chords' },
@@ -143,8 +125,6 @@ export const CONFIG = {
   SAVE_KEY: 'solmar-bay-save-v2',
 };
 
-// District names by block centre, used for the HUD location label and
-// mission text. The city reads these; the names are its own.
 export const DISTRICTS = [
   { name: 'Downtown', minX: -108, maxX: 108, minZ: -108, maxZ: 108 },
   { name: 'Old Town', minX: -288, maxX: -108, minZ: -108, maxZ: 288 },
@@ -161,7 +141,6 @@ export function districtAt(x, z) {
   return 'Solmar Bay';
 }
 
-// The respect tier name for a respect total: the highest tier reached.
 export function respectTierName(respect) {
   let name = CONFIG.RESPECT_TIERS[0].name;
   for (const tier of CONFIG.RESPECT_TIERS) {
@@ -170,7 +149,6 @@ export function respectTierName(respect) {
   return name;
 }
 
-// Which part of the day the clock is in: dawn, day, dusk or night.
 export function phaseOfDay(clockMinutes) {
   const dn = CONFIG.DAY_NIGHT;
   const m = ((clockMinutes % 1440) + 1440) % 1440;

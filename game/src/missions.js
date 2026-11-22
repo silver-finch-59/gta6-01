@@ -1,11 +1,4 @@
-// Solmar Bay — story missions, package pickups and taxi fares.
-// Story: Nova Reyes, getaway driver, back in Solmar Bay. Fixer Dom Ferreira
-// hands out the jobs; the Viper crew wants the city for itself. Eight story
-// missions, then free roam with fares and packages. Mission progress lives
-// in state.mission (index / phase / objective / marker / timer / done). The
-// 3D beacon here only visualises state.mission.marker. This module never
-// touches world.player / world.combat / world.hud in its constructor — only
-// inside update() and startMission(), after main.js has built the world.
+// missions.js — eight story missions, taxi fares, hidden packages.
 import * as THREE from 'three';
 import { CONFIG, districtAt } from './config.js';
 import { Car } from './vehicles.js';
@@ -26,7 +19,6 @@ export const MISSION_TITLES = [
 
 const FREE_ROAM_OBJECTIVE = 'Solmar Bay is yours, Nova. Free roam — taxi fares and packages still pay.';
 
-// Fallbacks used only if city.spawnPoints does not name a spot yet.
 const FALLBACKS = {
   garage: { x: 36, z: 180 },
   marina: { x: 144, z: 252 },
@@ -52,18 +44,6 @@ function loc(world, name) {
   return pointOf(spots ? spots[name] : null, FALLBACKS[name]);
 }
 
-// Mission definitions. Coordinates resolve in startMission() so they always
-// use the live spawn points. Step fields:
-//   goto   {at, radius, text}        reach the marker
-//   steal  {at, carType, text}       spawn a target car; enter it
-//   deliver{at, text}                drive the target car to the marker
-//   kill   {at, count, text}         defeat every spawned Viper
-//   pickup {at, text}                reach the marker, then next step
-//   escape {text}                    wanted must fall back to 0
-//   timed  {at, dest, seconds, carType, text}  drive the spawned truck to
-//          dest before the countdown ends, or the mission fails.
-//   tail   {route, seconds, text}    follow the marked car for `seconds`
-//          without being spotted (too close) or losing it (too far).
 function missionDefs(world) {
   const garage = loc(world, 'garage');
   const marina = loc(world, 'marina');
@@ -208,7 +188,6 @@ export function createMissions(world) {
   const collectedPackages = new Set();
   let packageMeshes = null;
 
-  // Taxi state — fully separate from state.mission (own beacon, own flow).
   const taxi = { mode: 'idle', spot: null, dest: null, cooldown: 6 };
 
   function ensureBeacons() {
@@ -222,8 +201,6 @@ export function createMissions(world) {
     buildPackageMeshes();
   }
 
-  // Glowing gold parcels at every package spot, so the collectibles are
-  // visible in the world instead of invisible coordinates.
   function buildPackageMeshes() {
     const spots = world.city ? world.city.packages : null;
     if (!Array.isArray(spots)) return;
@@ -270,11 +247,6 @@ export function createMissions(world) {
     state.mission.marker = point ? { x: point.x, z: point.z } : null;
   }
 
-  // Spawn a mission target car with the real vehicle class (vehicles.js):
-  // new Car(world, type, x, z, yaw, color) builds the model via
-  // makeCarModel and adds it to the scene. Registered in traffic.cars as a
-  // 'parked' entry so the player can enter it (player.js scans that list)
-  // and traffic leaves it alone until it is driven.
   function spawnTargetCar(kind, x, z) {
     const color = kind === 'sports' ? 0xff5533 : kind === 'truck' ? 0x3f6fb5 : kind === 'van' ? 0x8a93a5 : 0x8a93a5;
     const car = new Car(world, kind, x, z, 0, color);
@@ -287,7 +259,6 @@ export function createMissions(world) {
 
   function syncTargetMesh(car) {
     if (!car) return;
-    // While the player drives it, the player module owns the mesh.
     if (state.player.car === car) return;
     if (typeof car.sync === 'function') car.sync();
   }
@@ -330,7 +301,6 @@ export function createMissions(world) {
       }
       case 'deliver': {
         if (!targetCar) {
-          // Safety net (e.g. loaded mid-mission): spawn the car near the player.
           targetCar = spawnTargetCar('sports', state.player.x + 6, state.player.z);
         }
         setMarker(step.at);
@@ -373,7 +343,6 @@ export function createMissions(world) {
         break;
       }
       case 'tail': {
-        // A retry (spotted or lost) restarts the tail with a fresh courier.
         if (tailCar) removeTargetVehicle(tailCar);
         tailRoute = step.route.slice();
         tailAt = 0;
@@ -383,7 +352,6 @@ export function createMissions(world) {
         const start = tailRoute[0];
         tailCar = spawnTargetCar('sedan', start.x, start.z);
         tailCar.target = true;
-        // The courier drives itself; mark its traffic entry so it moves.
         if (world.traffic && Array.isArray(world.traffic.cars)) {
           const entry = world.traffic.cars.find((e) => e.car === tailCar);
           if (entry) entry.kind = 'tail';
@@ -415,9 +383,6 @@ export function createMissions(world) {
     state.mission.index = index;
     state.mission.phase = 0;
     state.mission.done = false;
-    // A finished job's vehicle stops being a mission target — it is just a
-    // car in the world now. (Except a truck the player is still sitting in
-    // on a timed-job retry: it stays the target.)
     if (targetCar && !(keepTruck && targetCar === targetTruck)) targetCar.target = false;
     if (targetTruck && !keepTruck) targetTruck.target = false;
     targetCar = null;
@@ -425,7 +390,6 @@ export function createMissions(world) {
     keepTruck = false;
     if (tailCar) { removeTargetVehicle(tailCar); tailCar = null; }
     tailRoute = null;
-    // A new story job cancels any taxi fare in progress.
     taxi.mode = 'idle';
     taxi.spot = null;
     taxi.dest = null;
@@ -480,7 +444,6 @@ export function createMissions(world) {
         if (i >= 0) cars.splice(i, 1);
       }
     } catch (_err) {
-      // Cleanup must never break the mission flow.
     }
   }
 
@@ -494,9 +457,6 @@ export function createMissions(world) {
       );
     }
     const index = state.mission.index;
-    // Remove the failed job's truck so the retry spawns a fresh one —
-    // unless the player is sitting in it, in which case it is kept and the
-    // retry reuses it (the timed step repositions it to the start).
     keepTruck = state.player.car === targetTruck;
     if (!keepTruck) removeTargetVehicle(targetTruck);
     if (targetCar && targetCar !== targetTruck && state.player.car !== targetCar) {
@@ -551,7 +511,6 @@ export function createMissions(world) {
       }
       case 'steal': {
         if (targetCar && state.player.car === targetCar) {
-          // player.js already counted the theft (carsStolen + heat) on entry.
           toast('Got the car — now deliver it!');
           advanceStep();
         }
@@ -569,7 +528,6 @@ export function createMissions(world) {
       }
       case 'kill': {
         if (!world.combat || typeof world.combat.spawnEnemies !== 'function') {
-          // No combat module: clear the step once Nova reaches the fight.
           if (distance2D(px, pz, step.at.x, step.at.z) <= 10) advanceStep();
           break;
         }
@@ -607,7 +565,6 @@ export function createMissions(world) {
         break;
       }
       case 'tail': {
-        // Drive the courier along its route, one waypoint at a time.
         if (tailCar && tailRoute) {
           const dest = tailRoute[tailAt];
           const d = distance2D(tailCar.x, tailCar.z, dest.x, dest.z);
@@ -618,7 +575,6 @@ export function createMissions(world) {
         }
         const dist = tailCar ? distance2D(px, pz, tailCar.x, tailCar.z) : 999;
         tailTimer -= dt;
-        // Too close and the courier spots Nova; too far and the trail dies.
         if (dist < 12) tailSeen += dt * 0.5;
         else tailSeen = Math.max(0, tailSeen - dt * 0.3);
         if (dist > 70) tailLost += dt * 0.4;
@@ -657,7 +613,6 @@ export function createMissions(world) {
       }
       const at = readPoint(pkg);
       if (!at) continue;
-      // Spin the visible parcel so it catches the eye.
       if (packageMeshes && packageMeshes[i]) {
         packageMeshes[i].rotation.y += dt * 1.2;
         packageMeshes[i].children[0].position.y = 0.8 + Math.sin(state.time * 2 + i) * 0.12;
@@ -690,7 +645,6 @@ export function createMissions(world) {
         }
       }
       if (!at && rng) {
-        // Fallback: a random road intersection.
         const lines = CONFIG.ROAD_LINES;
         at = {
           x: lines[Math.floor(rng.next() * lines.length)] + (rng.next() * 8 - 4),
@@ -743,7 +697,6 @@ export function createMissions(world) {
         distance2D(state.player.x, state.player.z, taxi.spot.x, taxi.spot.z) <= 6
       ) {
         const dest = randomSidewalkPoint(0);
-        // Destination should be a real trip, not next door.
         let d = dest;
         for (let tries = 0; d && tries < 8 && distance2D(taxi.spot.x, taxi.spot.z, d.x, d.z) < 80; tries += 1) {
           d = randomSidewalkPoint(0);
@@ -756,7 +709,6 @@ export function createMissions(world) {
       return;
     }
 
-    // mode === 'fare'
     taxiBeacon.group.position.set(taxi.dest.x, 0, taxi.dest.z);
     taxiBeacon.group.visible = true;
     if (!state.player.car) {
@@ -769,7 +721,6 @@ export function createMissions(world) {
       return;
     }
     if (distance2D(state.player.x, state.player.z, taxi.dest.x, taxi.dest.z) <= 8) {
-      // Fare scales with trip length: base fare plus per-metre.
       const trip = distance2D(taxi.spot.x, taxi.spot.z, taxi.dest.x, taxi.dest.z);
       const fare = Math.round(CONFIG.MISSIONS.TAXI_FARE + trip * (CONFIG.MISSIONS.TAXI_PER_METRE || 0));
       addMoney(state, fare);
@@ -803,7 +754,6 @@ export function createMissions(world) {
       return;
     }
     if (beaconsReady) {
-      // Mission beacon follows state.mission.marker, pulsing ring.
       const marker = state.mission.marker;
       if (marker) {
         beacon.group.position.set(marker.x, 0, marker.z);

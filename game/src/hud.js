@@ -1,13 +1,9 @@
-// Solmar Bay — the HUD: cash, clock, district, wanted stars, health, speed,
-// mission objective, toasts, dialogue, crosshair, and the live minimap.
-// Reads state every frame and the DOM ids from index.html; never writes game
-// state. Every DOM lookup is guarded so a missing element degrades silently.
+// hud.js — HUD, minimap, dialogue, objectives, damage vignette.
 import { CONFIG, districtAt, respectTierName, phaseOfDay } from './config.js';
 import { MISSION_TITLES } from './missions.js';
 
 const FREE_ROAM_OBJECTIVE = 'Solmar Bay is yours, Nova. Free roam — taxi fares and packages still pay.';
 
-// World bounds used for the minimap projection (matches config.js).
 const MAP_MIN_X = -288;
 const MAP_MAX_X = 336;
 const MAP_MIN_Z = -288;
@@ -25,8 +21,6 @@ function readPoint(entry) {
   return null;
 }
 
-// Accepts a traffic/police entry in any of the shapes the other modules use:
-// {x,z}, {car:{x,z}}, or a bare car record.
 function entryPoint(entry) {
   if (!entry) return null;
   if (typeof entry.x === 'number') return { x: entry.x, z: entry.z };
@@ -61,7 +55,6 @@ export function createHud(world) {
     minimap: $('minimap'),
   };
 
-  // Build the five wanted stars once; update() only toggles their classes.
   const starSpans = [];
   if (el.stars) {
     el.stars.textContent = '';
@@ -123,7 +116,6 @@ export function createHud(world) {
     return ((x - MAP_MIN_X) / (MAP_MAX_X - MAP_MIN_X)) * MAP_SIZE;
   }
   function toMapY(z) {
-    // North is -z, so -z goes up: small z maps to the top of the canvas.
     return ((z - MAP_MIN_Z) / (MAP_MAX_Z - MAP_MIN_Z)) * MAP_SIZE;
   }
 
@@ -157,7 +149,6 @@ export function createHud(world) {
       }
     }
     if (!drew) {
-      // Fallback: the road grid from config.js (roads run along ROAD_LINES).
       ctx.beginPath();
       for (const line of CONFIG.ROAD_LINES) {
         ctx.moveTo(toMapX(line), toMapY(MAP_MIN_Z));
@@ -174,15 +165,12 @@ export function createHud(world) {
     const ctx = mapCtx;
     const t = state.time;
 
-    // Dark background.
     ctx.fillStyle = '#0d1526';
     ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
 
-    // Ocean strip on the east edge.
     ctx.fillStyle = 'rgba(28,90,160,0.9)';
     ctx.fillRect(toMapX(270), 0, MAP_SIZE - toMapX(270), MAP_SIZE);
 
-    // Building blocks (darker rects) from the city colliders.
     const colliders = world.city ? world.city.colliders : null;
     if (Array.isArray(colliders)) {
       ctx.fillStyle = 'rgba(52,62,92,0.9)';
@@ -199,13 +187,11 @@ export function createHud(world) {
 
     drawRoads(ctx);
 
-    // North tick at the top edge.
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.font = 'bold 11px Verdana, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('N', MAP_SIZE / 2, 12);
 
-    // Packages: pink dots.
     const packages = world.city ? world.city.packages : null;
     if (Array.isArray(packages)) {
       ctx.fillStyle = '#ff7ad9';
@@ -219,7 +205,6 @@ export function createHud(world) {
       }
     }
 
-    // Taxi customer: green dot.
     if (world.missions && typeof world.missions.getTaxiBlip === 'function') {
       const blip = world.missions.getTaxiBlip();
       if (blip) {
@@ -230,7 +215,6 @@ export function createHud(world) {
       }
     }
 
-    // Traffic: small white dots.
     const trafficCars = world.traffic ? world.traffic.cars : null;
     if (Array.isArray(trafficCars)) {
       ctx.fillStyle = 'rgba(255,255,255,0.85)';
@@ -241,7 +225,6 @@ export function createHud(world) {
       }
     }
 
-    // Police: red dots. police.js returns { policeCars: [{car, …}] }.
     const policeCars = world.police
       ? world.police.policeCars || world.police.cars
       : null;
@@ -256,7 +239,6 @@ export function createHud(world) {
       }
     }
 
-    // Enemies: orange dots, so a fight reads on the map before it is seen.
     if (world.combat && Array.isArray(world.combat.enemies)) {
       ctx.fillStyle = '#ff8c2e';
       for (const e of world.combat.enemies) {
@@ -267,7 +249,6 @@ export function createHud(world) {
       }
     }
 
-    // Mission marker: pulsing yellow diamond with a faint ring.
     const marker = state.mission.marker;
     if (marker) {
       const pulse = 5 + Math.sin(t * 4) * 2;
@@ -288,7 +269,6 @@ export function createHud(world) {
       ctx.fill();
     }
 
-    // Player: white triangle rotated by yaw.
     const px = toMapX(state.player.x);
     const py = toMapY(state.player.z);
     const yaw = state.player.yaw || 0;
@@ -331,13 +311,11 @@ export function createHud(world) {
     for (let i = 0; i < starSpans.length; i += 1) {
       starSpans[i].className = i < state.wanted ? 'lit' : 'dim';
     }
-    // Heat bar: fills toward the next star.
     if (el.heatBar) {
       const pct = state.wanted >= 5 ? 100 : Math.round((state.heat / CONFIG.POLICE.HEAT_PER_STAR) * 100);
       el.heatBar.style.width = `${pct}%`;
       el.heatBar.style.display = state.wanted > 0 || state.heat > 0 ? '' : 'none';
     }
-    // Respect meter: progress to the next tier.
     if (el.respectBar || el.respectTier) {
       const respect = state.respect || 0;
       const tiers = CONFIG.RESPECT_TIERS;
@@ -354,13 +332,11 @@ export function createHud(world) {
         el.respectBar.style.width = `${Math.min(100, Math.round((done / span) * 100))}%`;
       }
     }
-    // Radio station label.
     if (el.radio) {
       const stations = CONFIG.RADIO_STATIONS || [];
       const station = stations[state.radioStation || 0] || stations[0];
       el.radio.textContent = station ? `♪ ${station.name}` : '';
     }
-    // Distance to the mission marker.
     if (el.missionDist) {
       const marker = state.mission.marker;
       if (marker && !state.mission.done) {
@@ -410,7 +386,6 @@ export function createHud(world) {
       el.crosshair.style.display = state.player.onFoot && state.player.armed ? 'block' : 'none';
     }
 
-    // Damage vignette: a red flash that fades after a hit.
     if (el.vignette) {
       const hurtNow = state.health < lastHealth;
       if (hurtNow) vignetteTimer = Math.max(vignetteTimer, 0.6);

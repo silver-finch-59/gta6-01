@@ -1,8 +1,4 @@
-// Solmar Bay — vehicles: car models and arcade driving, for the player and
-// the AI alike. Every vehicle is built from boxes and cylinders only: no
-// outside assets, no network requests, 100% original. Local forward is +Z
-// (the front of the car), so a group with rotation.y = yaw travels along
-// (sin(yaw), cos(yaw)) on the XZ plane.
+// vehicles.js — car models and arcade driving physics.
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { resolveCircleColliders, clampToWorld } from './collide.js';
@@ -15,7 +11,6 @@ export function wrapAngle(a) {
   return angle;
 }
 
-// state.player.car is a Car (or, defensively, a wrapper holding one).
 export function getPlayerCar(state) {
   if (!state || !state.player) return null;
   const c = state.player.car;
@@ -42,16 +37,11 @@ function slab(w, h, d, mat, x, y, z) {
   return m;
 }
 
-// Per-kind dimensions and handling, from the config table with safe
-// fallbacks for kinds the table does not know.
 function kindSpec(type) {
   const table = CONFIG.CAR_KINDS || {};
   return table[type] || { topSpeed: CONFIG.CAR.MAX_SPEED, accel: CONFIG.CAR.ACCEL, steer: CONFIG.CAR.STEER_MAX, length: 4.4, width: 1.9 };
 }
 
-// Build a low-poly vehicle. Returns the group; the wheels, the front-wheel
-// pivots, the headlight and taillight materials are stashed in userData so
-// the Car class can steer, spin and light them.
 export function makeCarModel(type, colorHex) {
   const group = new THREE.Group();
   const t = type || 'sedan';
@@ -81,7 +71,6 @@ export function makeCarModel(type, colorHex) {
   const wheelX = halfWid - 0.08;
 
   if (isBike) {
-    // Motorbike: a narrow frame, a fuel tank, a seat and a rider figure.
     group.add(slab(0.5, 0.5, 1.9, body, 0, 0.62, 0));
     group.add(slab(0.44, 0.35, 0.7, glass, 0, 0.95, 0.35));
     group.add(slab(0.4, 0.18, 0.9, dark, 0, 0.82, -0.45));
@@ -97,11 +86,9 @@ export function makeCarModel(type, colorHex) {
     helmet.castShadow = true;
     group.add(helmet);
   } else {
-    // Main body.
     const bodyH = isSports ? 0.5 : isTruck ? 0.7 : isBus ? 0.9 : 0.62;
     const bodyY = isSports ? 0.5 : isBus ? 0.72 : 0.58;
     group.add(slab(wid, bodyH, len, body, 0, bodyY, isTruck ? -0.5 : 0));
-    // Cabin / cab.
     if (isTruck) {
       group.add(slab(wid - 0.1, 0.85, 1.5, body, 0, 1.0, 1.9));
       group.add(slab(wid - 0.3, 0.7, 1.2, glass, 0, 1.05, 2.35));
@@ -110,7 +97,6 @@ export function makeCarModel(type, colorHex) {
       const cabLen = isBus ? len - 1.2 : len - 0.9;
       group.add(slab(wid - 0.12, isBus ? 1.1 : 0.95, cabLen, glass, 0, 1.25, -0.2));
       if (isBus) {
-        // Roof sign and a stripe along the flank.
         group.add(slab(1.6, 0.22, 0.6, paint(0xf2c200, { roughness: 0.5, metalness: 0.2 }), 0, 1.95, 0.4));
         group.add(slab(0.05, 0.3, len - 1.4, paint(0xf2c200, { roughness: 0.5, metalness: 0.2 }), -halfWid - 0.01, 0.95, 0));
         group.add(slab(0.05, 0.3, len - 1.4, paint(0xf2c200, { roughness: 0.5, metalness: 0.2 }), halfWid + 0.01, 0.95, 0));
@@ -121,7 +107,6 @@ export function makeCarModel(type, colorHex) {
       const cabinMat = isPolice ? paint(0xf2f2f2, { roughness: 0.4, metalness: 0.5 }) : glass;
       group.add(slab(wid - 0.24, 0.55, cabinLen, cabinMat, 0, cabinY, isSports ? -0.15 : -0.25));
     }
-    // Sports spoiler.
     if (isSports) {
       group.add(slab(1.9, 0.06, 0.3, dark, 0, 1.0, -2.2));
       group.add(slab(0.08, 0.22, 0.08, dark, -0.8, 0.88, -2.2));
@@ -129,17 +114,14 @@ export function makeCarModel(type, colorHex) {
     }
   }
 
-  // Police roof light bar: red on the left, blue on the right.
   if (isPolice) {
     group.add(slab(1.1, 0.09, 0.34, dark, 0, 1.42, -0.25));
     group.add(slab(0.48, 0.14, 0.3, paint(0x881111, { emissive: 0xff2222, emissiveIntensity: 2.2 }), -0.27, 1.5, -0.25));
     group.add(slab(0.48, 0.14, 0.3, paint(0x111188, { emissive: 0x2244ff, emissiveIntensity: 2.2 }), 0.27, 1.5, -0.25));
-    // White doors: thin bright panels on both flanks.
     group.add(slab(0.04, 0.34, 1.5, paint(0xf2f2f2, { roughness: 0.4, metalness: 0.5 }), -halfWid - 0.01, 0.62, 0.1));
     group.add(slab(0.04, 0.34, 1.5, paint(0xf2f2f2, { roughness: 0.4, metalness: 0.5 }), halfWid + 0.01, 0.62, 0.1));
   }
 
-  // Headlights (front, +Z) and taillights (rear, -Z).
   const frontZ = (isTruck ? -0.5 : 0) + halfLen + 0.01;
   const rearZ = (isTruck ? -0.5 : 0) - halfLen - 0.01;
   const lightX = isBike ? 0.18 : 0.65;
@@ -153,9 +135,6 @@ export function makeCarModel(type, colorHex) {
     group.add(slab(0.36, 0.14, 0.06, tailMat, lightX, 0.62, rearZ));
   }
 
-  // Wheels: cylinder geometry pre-rotated so the axle lies along X; spinning
-  // is then just rotation.x. The front pair sits on steering pivots so the
-  // wheels visibly turn with the steering input.
   const wheelGeo = new THREE.CylinderGeometry(wheelR, wheelR, 0.26, 14);
   wheelGeo.rotateZ(Math.PI / 2);
   const wheels = [];
@@ -209,9 +188,6 @@ export class Car {
     if (this.group.parent) this.group.parent.remove(this.group);
   }
 
-  // Copy x/z/yaw onto the mesh; spin the wheels by the distance travelled
-  // since the last sync (no dt needed, frame-rate independent). The front
-  // wheels yaw with the steering, and the lights brighten after dusk.
   sync() {
     const dx = this.x - this._lx;
     const dz = this.z - this._lz;
@@ -228,7 +204,6 @@ export class Car {
     for (let i = 0; i < wheels.length; i += 1) wheels[i].rotation.x = this._wheelAngle;
     const pivots = this.group.userData.steerPivots || [];
     for (const p of pivots) p.rotation.y = -this.steer * 0.9;
-    // Headlights on after dusk; brake lights flare while braking.
     const clock = this.world && this.world.state ? this.world.state.clockMinutes : 1000;
     const dark = dayPhase(clock) === 'night' || dayPhase(clock) === 'dusk';
     const head = this.group.userData.headMat;
@@ -237,8 +212,6 @@ export class Car {
     if (tail) tail.emissiveIntensity = this._braking ? 2.4 : (dark ? 1.2 : 0.4);
   }
 
-  // Push this car out of another circle (used by traffic/police for
-  // car-vs-car separation). Slows the car slightly.
   pushFrom(x, z, r) {
     let dx = this.x - x;
     let dz = this.z - z;
@@ -274,8 +247,6 @@ export class Car {
     this.z = c.z;
   }
 
-  // Arcade driving for the player. W/up accelerates, S brakes/reverses,
-  // A/D steers (returns to centre), Space is the handbrake.
   updatePlayer(dt, input) {
     const state = this.world.state;
     const keys = input.keys;
@@ -312,7 +283,6 @@ export class Car {
     if (this.speed > maxSpeed) this.speed = maxSpeed;
     if (this.speed < -CONFIG.CAR.REVERSE_MAX_SPEED) this.speed = -CONFIG.CAR.REVERSE_MAX_SPEED;
 
-    // Steering scales with speed and flips in reverse, like a real car.
     const spdF = Math.max(-1, Math.min(1, this.speed / 9));
     this.yaw += this.steer * 1.9 * spdF * dt;
 
@@ -326,8 +296,6 @@ export class Car {
     this.sync();
   }
 
-  // AI driving (traffic / police): ease toward targetSpeed, turn the yaw
-  // toward targetYaw, same building + world-bounds collisions as the player.
   updateAuto(dt, targetSpeed, targetYaw) {
     const diff = wrapAngle(targetYaw - this.yaw);
     this.steer = Math.max(

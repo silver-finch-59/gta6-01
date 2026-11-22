@@ -1,9 +1,4 @@
-// Screenshot scenes for Solmar Bay. Each scene plays the real game forward
-// from a fresh world for a fixed number of 1/60 s steps, steered by a small
-// autopilot through the same input the player uses, so every frame is what a
-// short stretch of real play looks like — and the same seed always gives the
-// same frame. main.js calls stageShot(world, name, step) in ?shot= mode,
-// renders once, and flags window.__shotReady.
+// shots.js — staged screenshot scenes: chase, marina, shootout, title.
 import { Car, getPlayerCar } from './vehicles.js';
 
 const STEP = 1 / 60;
@@ -15,8 +10,6 @@ function clampAngle(a) {
   return angle;
 }
 
-// Drive toward a waypoint for `seconds`, steering with A/D through the real
-// player input. The car follows the road the waypoint sits on.
 function steerDrive(world, step, target, seconds) {
   const input = world.input;
   const steps = Math.round(seconds / STEP);
@@ -35,7 +28,6 @@ function steerDrive(world, step, target, seconds) {
   input.keys.clear();
 }
 
-// Walk forward for `seconds` (W relative to the camera, which teleport aimed).
 function stroll(world, step, seconds, keys) {
   const input = world.input;
   const steps = Math.round(seconds / STEP);
@@ -49,10 +41,6 @@ function stroll(world, step, seconds, keys) {
   input.keys.clear();
 }
 
-// Stand and shoot at whatever the camera faces for `seconds`, healing the
-// player after every step so the staged scene never ends on the WASTED
-// screen, then keep stepping until one more shot actually fires so the
-// final frame catches the muzzle flash and a tracer in the air.
 function firefight(world, step, seconds) {
   const input = world.input;
   const steps = Math.round(seconds / STEP);
@@ -73,8 +61,6 @@ function firefight(world, step, seconds) {
   input.keys.clear();
 }
 
-// Put the player in a fresh car of `type` at (x, z, yaw) and register it as
-// the player's car so traffic and the police treat it as the player's.
 function parkPlayerCar(world, type, x, z, yaw, color) {
   const car = new Car(world, type, x, z, yaw, color);
   car.kind = 'player';
@@ -83,7 +69,6 @@ function parkPlayerCar(world, type, x, z, yaw, color) {
   return car;
 }
 
-// Road-graph lookups, so staged traffic uses real edges and nodes.
 function findNode(world, x, z) {
   const nodes = world.city.roadGraph.nodes;
   for (let i = 0; i < nodes.length; i += 1) {
@@ -99,7 +84,6 @@ function findEdge(world, a, b) {
   return -1;
 }
 
-// A real traffic car on the road ahead of the player, driving the same way.
 function spawnTrafficAhead(world, x, z, fromNode, toNode, speed, type, color) {
   const edge = findEdge(world, fromNode, toNode);
   if (edge < 0 || fromNode < 0 || toNode < 0) return;
@@ -112,8 +96,6 @@ function spawnTrafficAhead(world, x, z, fromNode, toNode, speed, type, color) {
   });
 }
 
-// A traffic car placed on the same road line as (x, z), heading along `yaw`.
-// The road segment is found from the config road lines, so the entry is valid.
 function spawnTrafficOnRoad(world, x, z, yaw, speed, type, color) {
   const lines = [-252, -180, -108, -36, 36, 108, 180, 252];
   let line = lines[0];
@@ -140,50 +122,80 @@ function stageChase(world, step) {
   state.money = 1250;
   state.respect = 320;
   world.missions.startMission(0);
-  // Downtown, heading north up the x=36 road in a Sunset GT. The drive
-  // runs clean (no wanted level yet) so no cruiser can ram or PIT the car
-  // mid-run and spin it around; the 3-star chase is staged at the end,
-  // once the car is at speed and pointed up the road.
   state.wanted = 0;
   state.heat = 0;
   world.player.teleport(36, 190, Math.PI);
   parkPlayerCar(world, 'sports', 36, 190, Math.PI, 0xff5533);
-  // 5 seconds of flat-out driving, ending mid-block (not at an intersection).
   steerDrive(world, step, { x: 36, z: -252 }, 5);
-  // Re-aim the chase camera at the car's real heading: the camera yaw does
-  // not follow the car, so any nudge during the run would leave it looking
-  // at the car from the side. teleport() resets the camera 7 m behind the
-  // car on its heading; a short coast lets it settle at the driving
-  // distance while the car holds its speed.
   const car = getPlayerCar(world.state);
   if (car) {
     world.player.teleport(car.x, car.z, car.yaw);
     for (let i = 0; i < 30; i += 1) step(STEP);
   }
-  // Now the chase: 3 stars, full heat, fresh crime, so the heat bar stays
-  // lit for the frame.
   state.wanted = 3;
   state.heat = 90;
   state.secondsSinceCrime = 0;
-  // Final frame: a roadblock ahead and traffic sharing the road, so the
-  // chase is visible, not just on the minimap. The cruisers sit just ahead
-  // of the player (28 m and 48 m) with traffic beyond them, and the HUD is
-  // refreshed once so the stars and heat bar show the final wanted level
-  // (the HUD only updates inside stepWorld, which has already run).
+  for (let i = 0; i < 20; i += 1) step(STEP);
   const p = world.state.player;
   const fx = Math.sin(p.yaw);
   const fz = Math.cos(p.yaw);
-  const cop1 = new Car(world, 'police', p.x + fx * 28, p.z + fz * 28, p.yaw + Math.PI, 0x14161a);
-  const cop2 = new Car(world, 'police', p.x + fx * 48 - fz * 5, p.z + fz * 48 + fx * 5, p.yaw + Math.PI, 0x14161a);
-  world.police.policeCars.push({ car: cop1, ramCooldown: 0 });
-  world.police.policeCars.push({ car: cop2, ramCooldown: 0 });
-  cop1.sync();
-  cop2.sync();
-  // Traffic sharing the road beyond the roadblock: a sedan, a taxi and a
-  // van in the next lanes, so the final frame has something to weave through.
+  const rx = -fz;
+  const rz = fx;
+  const pcs = world.police.policeCars;
+  const flank = [
+    { fwd: 12, side: -3 },
+    { fwd: 14, side: 3 },
+  ];
+  for (let i = 0; i < pcs.length; i += 1) {
+    if (i < flank.length) {
+      const c = pcs[i].car;
+      c.x = p.x + fx * flank[i].fwd + rx * flank[i].side;
+      c.z = p.z + fz * flank[i].fwd + rz * flank[i].side;
+      c.yaw = p.yaw;
+      c.speed = 0;
+      c.sync();
+    } else {
+      pcs[i].car.destroy();
+    }
+  }
+  pcs.length = Math.min(pcs.length, flank.length);
+  const cops = world.police.cops;
+  const copSpots = [
+    { fwd: 8, side: 0 },
+    { fwd: 6, side: -4 },
+    { fwd: 7, side: 4 },
+  ];
+  for (let i = 0; i < cops.length && i < copSpots.length; i += 1) {
+    const c = cops[i];
+    c.x = p.x + fx * copSpots[i].fwd + rx * copSpots[i].side;
+    c.z = p.z + fz * copSpots[i].fwd + rz * copSpots[i].side;
+    c.mesh.position.set(c.x, 0, c.z);
+    c.mesh.rotation.y = Math.atan2(p.x - c.x, p.z - c.z);
+  }
+  const peds = world.traffic.peds;
+  const pedSpots = [
+    { fwd: 16, side: 8 },
+    { fwd: 21, side: 8 },
+  ];
+  for (let i = 0; i < peds.length && i < pedSpots.length; i += 1) {
+    const ped = peds[i];
+    ped.mode = 'chat';
+    ped.chatTimer = 60;
+    ped.x = p.x + fx * pedSpots[i].fwd + rx * pedSpots[i].side;
+    ped.z = p.z + fz * pedSpots[i].fwd + rz * pedSpots[i].side;
+    ped.mesh.position.set(ped.x, 0, ped.z);
+    ped.mesh.rotation.y = Math.atan2(p.x - ped.x, p.z - ped.z);
+  }
   spawnTrafficOnRoad(world, p.x + fx * 62 + fz * 3, p.z + fz * 62 - fx * 3, p.yaw, 11, 'sedan', 0x3a6fd8);
   spawnTrafficOnRoad(world, p.x + fx * 85 - fz * 3, p.z + fz * 85 + fx * 3, p.yaw, 9, 'taxi', 0xf2c200);
   spawnTrafficOnRoad(world, p.x + fx * 110 + fz * 3, p.z + fz * 110 - fx * 3, p.yaw, 8, 'van', 0x8a93a5);
+  const pc = getPlayerCar(world.state);
+  if (pc) {
+    pc.speed = 50;
+    pc.sync();
+    state.player.speed = 50;
+  }
+  world.hud.showDialogue('Dom Ferreira', 'Nova! Back in Solmar Bay at last. Take my sedan to the Marina — easy money.', 6500);
   world.hud.update(0);
 }
 
@@ -192,36 +204,81 @@ function stageMarina(world, step) {
   state.money = 640;
   state.respect = 120;
   world.missions.startMission(0);
-  // On foot on the Marina promenade, facing south-east toward the marina
-  // basin and the boats. A short walk stops well before the water's edge,
-  // with the pier and its stalls in view.
-  world.player.teleport(170, 210, 0.6);
-  stroll(world, step, 2.2, ['KeyW']);
+  world.player.teleport(250, 124, 1.66);
+  step(STEP);
+  const peds = world.traffic.peds;
+  const pedSpots = [
+    { x: 270, z: 124 },
+    { x: 277, z: 129 },
+    { x: 272, z: 135 },
+  ];
+  const p = world.state.player;
+  for (let i = 0; i < peds.length && i < pedSpots.length; i += 1) {
+    const ped = peds[i];
+    ped.mode = 'chat';
+    ped.chatTimer = 60;
+    ped.x = pedSpots[i].x;
+    ped.z = pedSpots[i].z;
+    ped.mesh.position.set(ped.x, 0, ped.z);
+    ped.mesh.rotation.y = Math.atan2(p.x - ped.x, p.z - ped.z);
+  }
+  const sedan = new Car(world, 'sedan', 282, 108, Math.PI / 2, 0x3a6fd8);
+  sedan.sync();
+  world.traffic.cars.push({ car: sedan, kind: 'parked', edge: -1, nodeTarget: null, speed: 0, color: 0x3a6fd8, _stuck: 0 });
+  world.hud.showDialogue('Dom Ferreira', 'Nova! Back in Solmar Bay at last. Take my sedan to the Marina — easy money.', 6500);
+  world.hud.update(0);
 }
 
 function stageShootout(world, step) {
   const state = world.state;
   state.money = 980;
-  // No wanted level: the staged fight is Nova vs the Vipers, and police
-  // cars would only beach themselves on the sand and steal the frame.
   state.wanted = 0;
   state.heat = 0;
+  state.clockMinutes = 18 * 60 + 15;
   world.missions.startMission(2);
-  // Beachfront lot: start ON the marker so the goto step completes at once
-  // and the kill step spawns the Vipers around the lot.
   world.player.teleport(284, 36, Math.PI / 2);
   step(STEP);
   step(STEP);
-  firefight(world, step, 7);
+  firefight(world, step, 2.5);
+  const p = world.state.player;
+  const alive = world.combat.enemies.filter((e) => !e.dead);
+  let bestYaw = p.yaw;
+  let bestCount = -1;
+  for (let a = 0; a < 24; a += 1) {
+    const yaw = (a / 24) * Math.PI * 2;
+    let count = 0;
+    for (const e of alive) {
+      const ang = Math.atan2(e.x - p.x, e.z - p.z);
+      let diff = ang - yaw;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      if (Math.abs(diff) <= Math.PI / 4) count += 1;
+    }
+    if (count > bestCount) {
+      bestCount = count;
+      bestYaw = yaw;
+    }
+  }
+  world.player.teleport(p.x, p.z, bestYaw);
+  step(STEP);
+  step(STEP);
+  const before = world.state.stats.shotsFired;
+  const input = world.input;
+  for (let i = 0; i < 40 && world.state.stats.shotsFired === before; i += 1) {
+    input.keys.clear();
+    input.justPressed.clear();
+    input.mouseDown = true;
+    step(STEP);
+    world.state.health = 100;
+  }
+  input.mouseDown = false;
+  input.keys.clear();
+  world.hud.showDialogue('Dom Ferreira', 'The Vipers want their car back. Teach them a lesson at the Beachfront lot, then meet me at the Marina.', 6500);
+  world.hud.update(0);
 }
 
 function stageTitle(world, step) {
-  // The title screen over the live city: Nova on the x=-36 road in
-  // Downtown (no stunt ramp there), camera slowly panning up the road
-  // canyon between the towers. main.js shows the title overlay and hides
-  // the HUD after this returns.
   world.player.teleport(-36, 0, Math.PI);
-  // A parked Sunset GT on the roadside gives the title frame a hero car.
   parkPlayerCar(world, 'sports', -30, 12, Math.PI * 0.9, 0xff5533);
   world.player.exitCar();
   world.player.teleport(-36, 0, Math.PI);
